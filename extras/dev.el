@@ -27,6 +27,10 @@
 ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(use-package treesit-auto
+  :config
+  (global-treesit-auto-mode))
+
 (use-package emacs
   :config
   ;; Treesitter config
@@ -89,8 +93,8 @@
   ;; no :ensure t here because it's built-in
 
   ;; Configure hooks to automatically turn-on eglot for selected modes
-  ; :hook
-  ; (((python-mode ruby-mode elixir-mode) . eglot))
+  :hook
+  (((go-mode ruby-mode) . eglot))
 
   :custom
   (eglot-send-changes-idle-time 0.1)
@@ -102,3 +106,16 @@
   ; (add-to-list 'eglot-server-programs
   ;              '(haskell-mode . ("haskell-language-server-wrapper" "--lsp")))
   )
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;
+;;;   gptel: A simple LLM client for Emacs
+;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(use-package gptel
+  :ensure t)
+
+;; Fetch the API key from the environment variable
+(setq gptel-api-key (getenv "OPENAI_API_KEY"))
+
