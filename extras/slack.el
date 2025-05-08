@@ -1,3 +1,4 @@
+(require 'cl-lib)
 
 ;; GNU Emacs client for Slack.
 ;; https://github.com/emacs-slack/emacs-slack
@@ -6,6 +7,7 @@
   :bind (("C-c S K" . slack-stop)
          ("C-c S c" . slack-select-rooms)
          ("C-c S u" . slack-select-unread-rooms)
+         ("C-c S n" . my/slack-show-unread-rooms) ; n = unread list
          ("C-c S U" . slack-user-select)
          ("C-c S s" . slack-search-from-messages)
          ("C-c S J" . slack-jump-to-browser)
@@ -41,6 +43,60 @@
      :default t
      ;; :subscribed-channels nil ;; using slack-extra-subscribed-channels because I can change it dynamically
      ))
+
+  ;; ========= Unread room list buffer =========
+  (define-derived-mode slack-unread-mode tabulated-list-mode "Slack-Unread"
+    "一覧で未読チャンネルを表示するモード。RET で開く。"
+    (setq tabulated-list-format [("Team" 15 t)
+                                 ("Room" 30 t)
+                                 ("Unread" 6 t)])
+    (setq tabulated-list-padding 2)
+    (tabulated-list-init-header))
+
+  (defun my/slack--collect-unread-rooms ()
+    "未読メッセージがある room の (TEAM ROOM) のリストを返す。"
+    (let (result)
+      (dolist (team slack-teams)
+        (dolist (room (append (slack-team-channels team)
+                              (slack-team-groups   team)
+                              (slack-team-ims      team)))
+          (when (slack-room-has-unread-p room)
+            (push (list team room) result))))
+      (nreverse result)))
+
+  (defun my/slack-unread-open ()
+    "現在行の room を開く。"
+    (interactive)
+    (let* ((id   (tabulated-list-get-id))
+           (spec (split-string id "|"))
+           (team-id (car  spec))
+           (room-id (cadr spec))
+           (team (cl-find-if (lambda (t) (string= (oref t id) team-id)) slack-teams))
+           (room (and team (slack-room-find room-id team))))
+      (when (and team room)
+        (slack-room-buffer-create room team))))
+
+  (define-key slack-unread-mode-map (kbd "RET") #'my/slack-unread-open)
+
+  ;; メインコマンド
+  (defun my/slack-show-unread-rooms ()
+    "未読のあるすべてのチャンネル / グループ / IM を一覧表示する。"
+    (interactive)
+    (let ((buf (get-buffer-create "*Slack Unread*")))
+      (with-current-buffer buf
+        (slack-unread-mode)
+        (setq tabulated-list-entries
+              (mapcar (lambda (pair)
+                        (let* ((team (car  pair))
+                               (room (cadr pair))
+                               (team-name (slack-team-name team))
+                               (room-name (slack-room-name room team))
+                               (unread    (number-to-string (slack-room-unread-count room)))
+                               (id (format "%s|%s" (oref team id) (oref room id))))
+                          (list id (vector team-name room-name unread))))
+                      (my/slack--collect-unread-rooms)))
+        (tabulated-list-print t))
+      (pop-to-buffer buf)))
 
 (use-package alert
   :ensure t
