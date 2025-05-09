@@ -60,6 +60,11 @@
   :ensure t
   :bind (("C-x g" . magit-status)))
 
+;; Put a github link to the source at the cursor to the pasteboard
+(use-package git-link
+  :ensure t
+  :bind (("C-c g l" . git-link)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;
 ;;;   Common file types
