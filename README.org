@@ -1,0 +1,4 @@
+#+AUTHOR: Kyle Bolton
+#+EMAIL: kyle.bolton@gmail.com
+
+Emacs Kit — a personal Emacs configuration originally forked from [[https://github.com/LionyxML/emacs-solo][emacs-solo]] by LionyxML, with additional packages to round out the experience.

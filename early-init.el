@@ -1,42 +1,112 @@
-;;;  ________                                                _______                 __                            __
-;;; /        |                                              /       \               /  |                          /  |
-;;; $$$$$$$$/ _____  ____   ______   _______  _______       $$$$$$$  | ______   ____$$ | ______   ______   _______$$ |   __
-;;; $$ |__   /     \/    \ /      \ /       |/       |      $$ |__$$ |/      \ /    $$ |/      \ /      \ /       $$ |  /  |
-;;; $$    |  $$$$$$ $$$$  |$$$$$$  /$$$$$$$//$$$$$$$/       $$    $$</$$$$$$  /$$$$$$$ /$$$$$$  /$$$$$$  /$$$$$$$/$$ |_/$$/
-;;; $$$$$/   $$ | $$ | $$ |/    $$ $$ |     $$      \       $$$$$$$  $$    $$ $$ |  $$ $$ |  $$/$$ |  $$ $$ |     $$   $$<
-;;; $$ |_____$$ | $$ | $$ /$$$$$$$ $$ \_____ $$$$$$  |      $$ |__$$ $$$$$$$$/$$ \__$$ $$ |     $$ \__$$ $$ \_____$$$$$$  \
-;;; $$       $$ | $$ | $$ $$    $$ $$       /     $$/       $$    $$/$$       $$    $$ $$ |     $$    $$/$$       $$ | $$  |
-;;; $$$$$$$$/$$/  $$/  $$/ $$$$$$$/ $$$$$$$/$$$$$$$/        $$$$$$$/  $$$$$$$/ $$$$$$$/$$/       $$$$$$/  $$$$$$$/$$/   $$/
+;;; early-init.el --- Emacs Kit Configuration --- Early Init  -*- lexical-binding: t; -*-
+;;
+;; Author: Rahul Martim Juliato
+;; URL: https://github.com/LionyxML/emacs-kit
+;; Package-Requires: ((emacs "30.1"))
+;; Keywords: config
+;; SPDX-License-Identifier: GPL-3.0-or-later
+;;
+
+;;; Commentary:
+;;  Early init configuration for Emacs Kit
+;;
+
+;;; Code:
+
+(defcustom emacs-kit-avoid-flash-options
+  '((enabled . t)
+    (background . "#292D3E") ;; Catppuccin "#1e1e2e" or Crafters "#292D3E"
+    (foreground . "#292D3E")
+    (reset-background . "#292D3E")
+    (reset-foreground . "#EEFFFF")) ;; Catppuccin "#cdd6f4" or Crafters "#EEFFFF"
+  "Options to avoid flash of light on Emacs startup.
+- `enabled`: Whether to apply the workaround.
+- `background`, `foreground`: Initial colors to use.
+- `reset-background`, `reset-foreground`: Optional explicit colors to restore after startup.
+
+NOTE: The default values here presented are set for the default
+`emacs-kit' custom theme.  If you'd like to turn this ON with another
+theme, change the background/foreground variables.
+
+If reset values are nil, nothing is reset."
+  :type '(alist :key-type symbol :value-type (choice (const nil) string))
+  :group 'emacs-kit)
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;
-;;;   Basic settings for quick startup and convenience
-;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; -------------------- PERFORMANCE & HACKS
+;; HACK: inscrease startup speed
 
-;; Startup speed, annoyance suppression
-(setq bedrock--initial-gc-threshold gc-cons-threshold)
-(setq gc-cons-threshold 10000000)
-(setq byte-compile-warnings '(not obsolete))
-(setq warning-suppress-log-types '((comp) (bytecomp)))
-(setq native-comp-async-report-warnings-errors 'silent)
+;; Delay garbage collection while Emacs is booting
+(setq gc-cons-threshold most-positive-fixnum
+      gc-cons-percentage 0.6)
 
-;; Silence stupid startup message
-(setq inhibit-startup-echo-area-message (user-login-name))
+;; Schedule garbage collection sensible defaults for after booting
+(add-hook 'after-init-hook
+          (lambda ()
+            (setq gc-cons-threshold (* 100 1024 1024)
+                  gc-cons-percentage 0.1)))
 
-;; Default frame configuration: full screen, good-looking title bar on macOS
-(setq frame-resize-pixelwise t)
-(tool-bar-mode -1)                      ; All these tools are in the menu-bar anyway
-(setq default-frame-alist '((fullscreen . maximized)
+;; Single VC backend inscreases booting speed
+(setq vc-handled-backends '(Git))
 
-                            ;; You can turn off scroll bars by uncommenting these lines:
-                            ;; (vertical-scroll-bars . nil)
-                            ;; (horizontal-scroll-bars . nil)
+;; Do not native compile if on battery power
+(setopt native-comp-async-on-battery-power nil) ; EMACS-31
 
-                            ;; Setting the face in here prevents flashes of
-                            ;; color as the theme gets activated
-                            (background-color . "#000000")
-                            (foreground-color . "#ffffff")
-                            (ns-appearance . dark)
-                            (ns-transparent-titlebar . t)))
+;; HACK: avoid being flashbanged
+(defun emacs-kit/avoid-initial-flash-of-light ()
+  "Avoid flash of light when starting Emacs, based on `emacs-kit-avoid-flash-options`."
+  (when (alist-get 'enabled emacs-kit-avoid-flash-options)
+    (setq mode-line-format nil)
+    (set-face-attribute 'default nil
+                        :background (alist-get 'background emacs-kit-avoid-flash-options)
+                        :foreground (alist-get 'foreground emacs-kit-avoid-flash-options))))
+
+(defun emacs-kit/reset-default-colors ()
+  "Reset any explicitly defined reset values in `emacs-kit-avoid-flash-options`."
+  (when (alist-get 'enabled emacs-kit-avoid-flash-options)
+    (let ((bg (alist-get 'reset-background emacs-kit-avoid-flash-options))
+          (fg (alist-get 'reset-foreground emacs-kit-avoid-flash-options)))
+      (when bg
+        (set-face-attribute 'default nil :background bg))
+      (when fg
+        (set-face-attribute 'default nil :foreground fg)))))
+
+(emacs-kit/avoid-initial-flash-of-light)
+(add-hook 'after-init-hook #'emacs-kit/reset-default-colors)
+
+
+;; Always start Emacs and new frames maximized
+(add-to-list 'default-frame-alist '(fullscreen . maximized))
+
+
+;; Better Window Management handling
+(setq frame-resize-pixelwise t
+      frame-inhibit-implied-resize t
+      frame-title-format
+      '(:eval
+        (let ((project (project-current)))
+          (if project
+              (concat "Emacs - [p] " (project-name project))
+              (concat "Emacs - " (buffer-name))))))
+
+(when (eq system-type 'darwin)
+  (setq ns-use-proxy-icon nil))
+
+(setq inhibit-compacting-font-caches t)
+
+;; Disables unused UI Elements
+(if (fboundp 'menu-bar-mode) (menu-bar-mode -1))
+(if (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
+(if (fboundp 'tool-bar-mode) (tool-bar-mode -1))
+(if (fboundp 'tooltip-mode) (tooltip-mode -1))
+(if (fboundp 'fringe-mode) (fringe-mode -1))
+
+
+;; Avoid raising the *Messages* buffer if anything is still without
+;; lexical bindings
+(setq warning-minimum-level :error)
+(setq warning-suppress-types '((lexical-binding)))
+
+
+(provide 'early-init)
+;;; early-init.el ends here
