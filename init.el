@@ -184,6 +184,12 @@ for ESLint."
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
 
+;;; ├──────────────────── macOS MODIFIER KEYS
+(setq mac-command-modifier 'super)
+(setq mac-option-modifier 'meta)
+(setq ns-command-modifier 'super)
+(setq ns-alternate-modifier 'meta)
+
 ;;; ├──────────────────── GENERAL EMACS CONFIG
 ;;; │ EMACS
 (use-package emacs
@@ -202,6 +208,7 @@ for ESLint."
    ("C-x w f v"  . window-layout-flip-topdown)       ; EMACS-31
    ("C-x 5 l"  . select-frame-by-name)
    ("C-x 5 s"  . set-frame-name)
+   ("s-v" . yank)
    ("RET" . newline-and-indent)
    ("C-z" . nil)
    ("C-x C-z" . nil)
@@ -334,6 +341,7 @@ for ESLint."
 
   ;; Fix archaic defaults
   (setopt sentence-end-double-space nil)
+  (setq-default indent-tabs-mode nil)
 
   ;; Save manual customizations to other file than init.el
   (setq custom-file (locate-user-emacs-file "custom-vars.el"))
@@ -387,8 +395,7 @@ for ESLint."
 
   ;; MacOS specific customizations
   (when (eq system-type 'darwin)
-    (setq insert-directory-program "gls")
-    (setq mac-command-modifier 'meta))
+    (setq insert-directory-program "gls"))
 
   ;; We want auto-save, but no #file# cluterring, so everything goes under our config cache/
   (make-directory (expand-file-name "cache/auto-saves/" user-emacs-directory) t)
@@ -835,126 +842,56 @@ If ###@### is found, remove it and place point there at the end."
 ;;; │ WINDOW
 (use-package window
   :ensure nil
+  :init
+  ;; Emacs 31 dev builds emit spurious "Combination limit" errors
+  ;; from C code when splitting single-window frames. Suppress them.
+  (defun emacs-kit/silence-combination-limit (orig-fn &rest args)
+    "Suppress `Combination limit' errors from window splitting."
+    (condition-case nil
+        (apply orig-fn args)
+      (error nil)))
+  (advice-add 'set-window-combination-limit :around #'emacs-kit/silence-combination-limit)
   :custom
   (display-buffer-alist
    '(("\\*\\(Backtrace\\|Warnings\\|Compile-Log\\|Messages\\|Bookmark List\\|Occur\\|eldoc\\)\\*"
-      (display-buffer-in-side-window)
-      (window-height . 0.25)
-      (side . bottom)
-      (slot . 0))
+      (display-buffer-reuse-window display-buffer-below-selected)
+      (window-height . 0.25))
      ("\\*\\([Hh]elp\\)\\*"
-      (display-buffer-in-side-window)
-      (window-width . 75)
-      (side . right)
-      (slot . 0))
+      (display-buffer-reuse-window display-buffer-pop-up-window)
+      (window-width . 75))
      ("\\*\\(Ibuffer\\)\\*"
-      (display-buffer-in-side-window)
-      (window-width . 100)
-      (side . right)
-      (slot . 1))
-     ("\\*claude:.*\\*"
-      (display-buffer-in-side-window)
-      (window-width . 100)
-      (side . right)
-      (slot . 1))
+      (display-buffer-reuse-window display-buffer-pop-up-window)
+      (window-width . 100))
      ("\\*\\(Flymake diagnostics\\|Completions\\)"
-      (display-buffer-in-side-window)
-      (window-height . 0.25)
-      (side . bottom)
-      (slot . 2))
+      (display-buffer-reuse-window display-buffer-below-selected)
+      (window-height . 0.25))
      ("\\*\\(grep\\|xref\\|find\\)\\*"
-      (display-buffer-in-side-window)
-      (window-height . 0.25)
-      (side . bottom)
-      (slot . 1))
+      (display-buffer-reuse-window display-buffer-below-selected)
+      (window-height . 0.25))
      ("\\*\\(M3U Playlist\\)"
-      (display-buffer-in-side-window)
-      (window-height . 0.25)
-      (side . bottom)
-      (slot . 3))
+      (display-buffer-reuse-window display-buffer-below-selected)
+      (window-height . 0.25))
      )))
 
 
-;;; │ TAB-BAR
-(use-package tab-bar
+;;; │ SERVER
+(use-package server
   :ensure nil
-  :defer t
-  :bind
-  (("C-x t <left>" . tab-bar-history-back)
-   ("C-x t <right>" . tab-bar-history-forward)
-   ("C-x t P" . #'emacs-kit/tab-group-from-project)
-   ("C-x t g" . #'emacs-kit/tab-switch-to-group)
-   ("C-x t RET" . #'emacs-kit/tab-select-by-number))
+  :config
+  (setq server-name (format "server-%s" (emacs-pid)))
+  (server-start))
+
+
+;;; │ PERSPECTIVE
+(use-package perspective
+  :ensure t
   :custom
-  (tab-bar-new-tab-choice "*scratch*")
-  (tab-bar-close-button-show nil)
-  (tab-bar-new-button-show nil)
-  (tab-bar-tab-hints t)
-  (tab-bar-auto-width nil)
-  (tab-bar-separator "")
-  (tab-bar-format '(tab-bar-format-tabs-groups
-                    tab-bar-separator
-                    tab-bar-format-align-right
-                    tab-bar-format-global))
+  (persp-mode-prefix-key (kbd "C-x x"))
+  (persp-modestring-short t)
   :init
-  ;;; --- OPTIONAL INTERNAL FN OVERRIDES TO DECORATE NAMES
-  (defun tab-bar-tab-name-format-hints (name tab i)
-    (if tab-bar-tab-hints
-        (if (eq (car tab) 'current-tab)
-        (concat (format "  *%d*  " i) "")
-        (concat (format "   %d   " i) ""))
-      name))
-
-  (defun tab-bar-tab-group-format-default (tab _i &optional current-p)
-    (propertize
-     (concat (funcall tab-bar-tab-group-function tab))
-     'face (if current-p 'tab-bar-tab-group-current 'tab-bar-tab-group-inactive)))
-
-  (defun emacs-kit/tab-bar-toggle-time ()
-    "Enable `display-time-mode' when `tab-bar-mode' is on, disable it otherwise."
-    (setq display-time-format "%a. %d %b %H:%M")
-    (if tab-bar-mode
-        (display-time-mode 1)
-      (display-time-mode -1)))
-
-  (add-hook 'tab-bar-mode-hook #'emacs-kit/tab-bar-toggle-time)
-
-  (defun emacs-kit/tab-select-by-number ()
-    "Switch to a tab by its hint number."
-    (interactive)
-    (let ((num (read-number "Tab number: ")))
-      (tab-bar-select-tab num)))
-
-  ;;; --- UTILITIES FUNCTIONS
-  (defun emacs-kit/tab-group-from-project ()
-    "Call `tab-group` with the current project name as the group."
-    (interactive)
-    (when-let* ((proj (project-current))
-                (name (file-name-nondirectory
-                       (directory-file-name (project-root proj)))))
-      (tab-group (format "[%s]" name))))
-
-  (defun emacs-kit/tab-switch-to-group ()
-    "Prompt for a tab group and switch to its first tab.
-Uses position instead of index field."
-    (interactive)
-    (let* ((tabs (funcall tab-bar-tabs-function)))
-      (let* ((groups (delete-dups (mapcar (lambda (tab)
-                                            (funcall tab-bar-tab-group-function tab))
-                                          tabs)))
-             (group (completing-read "Switch to group: " groups nil t)))
-        (let ((i 1) (found nil))
-          (dolist (tab tabs)
-            (let ((tab-group (funcall tab-bar-tab-group-function tab)))
-              (when (and (not found)
-                         (string= tab-group group))
-                (setq found t)
-                (tab-bar-select-tab i)))
-            (setq i (1+ i)))))))
-
-  ;;; --- TURNS ON BY DEFAULT
-  (tab-bar-mode 1)
-  (tab-bar-history-mode 1))
+  (persp-mode)
+  :config
+  (setq read-buffer-function 'persp-read-buffer))
 
 
 ;;; │ RCIRC
@@ -1481,6 +1418,22 @@ Ex: mpv file1 file2 file3 file4..."
   (setq wdired-create-parent-directories t))
 
 
+;;; │ EAT
+(use-package eat
+  :ensure t
+  :custom
+  (eat-enable-auto-line-mode t))
+
+(use-package vterm
+  :ensure t)
+
+(use-package claude-code
+  :ensure t
+  :custom
+  (claude-code-terminal-backend 'vterm)
+  (claude-code-enable-notifications t))
+
+
 ;;; │ ESHELL
 (use-package eshell
   :ensure nil
@@ -1916,6 +1869,10 @@ For the current icon style."
 
 
 ;;; │ MAGIT
+(use-package transient
+  :ensure t
+  :pin "melpa")
+
 (use-package magit
   :ensure t
   :bind ("C-x g" . magit-status))
@@ -3280,5 +3237,7 @@ As seen on: https://www.reddit.com/r/emacs/comments/1kfblch/need_help_with_addin
 (require 'emacs-kit-erc-image)
 (require 'emacs-kit-yt)
 (require 'emacs-kit-gh)
+(require 'emacs-kit-digits)
+(require 'emacs-kit-conductor)
 (provide 'init)
 ;;; └ init.el ends here
