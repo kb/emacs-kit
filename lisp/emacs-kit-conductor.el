@@ -25,8 +25,6 @@
   :ensure nil
   :no-require t
   :init
-  (require 'claude-code)
-
   (defun emacs-kit/conductor--setup-workspace (worktree-dir branch task)
     "Common setup for a conductor workspace.
 Opens perspective, magit, Claude, and optionally sends TASK."
