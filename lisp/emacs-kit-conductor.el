@@ -13,6 +13,8 @@
 
 ;;; Code:
 
+(eval-when-compile (require 'transient))
+
 (defvar claude-code-executable)
 (declare-function claude-code-run "claude-code-core")
 (declare-function claude-code-send-string "claude-code-core")
@@ -28,6 +30,7 @@
   (defun emacs-kit/conductor--setup-workspace (worktree-dir branch task)
     "Common setup for a conductor workspace.
 Opens perspective, magit, Claude, and optionally sends TASK."
+    (require 'claude-code)
     (project-remember-project (project-current nil worktree-dir))
     (persp-switch branch)
     (require 'magit)
@@ -87,6 +90,7 @@ hunk as context."
     (interactive)
     (unless (derived-mode-p 'magit-diff-mode 'magit-status-mode)
       (user-error "Not in a magit diff buffer"))
+    (require 'claude-code)
     (let* ((section (magit-current-section))
            (hunk-text (when section
                         (buffer-substring-no-properties
@@ -171,6 +175,7 @@ Opens a perspective with dired and Claude Code for the selected worktree."
       (unless worktree-dir
         (user-error "Worktree not found: %s" branch))
       (persp-switch branch)
+      (require 'claude-code)
       (require 'magit)
       (let ((default-directory worktree-dir))
         (magit-status-setup-buffer worktree-dir))
@@ -181,6 +186,7 @@ Opens a perspective with dired and Claude Code for the selected worktree."
   (defun emacs-kit/conductor-resume-all ()
     "Resume all existing worktrees as conductor workspaces."
     (interactive)
+    (require 'claude-code)
     (require 'magit)
     (let ((worktrees (emacs-kit/conductor--worktree-dirs)))
       (unless worktrees
@@ -419,6 +425,7 @@ Returns a hash table mapping cwd to the latest state string."
   (defun emacs-kit/conductor-workspace-claude ()
     "Open Claude chat in the current workspace's directory."
     (interactive)
+    (require 'claude-code)
     (let ((default-directory (or (emacs-kit/conductor--current-worktree-dir)
                                  default-directory))
           (claude-code-executable "claude --dangerously-skip-permissions"))
@@ -457,6 +464,16 @@ Returns a hash table mapping cwd to the latest state string."
                                  default-directory)))
       (project-switch-project default-directory)))
 
+  (defun emacs-kit/conductor--core-context-p ()
+    "Return non-nil if the active context is the digits core repo or a core worktree."
+    (when-let* ((root (or (emacs-kit/conductor--current-worktree-dir)
+                          (vc-root-dir))))
+      (let ((root (directory-file-name (expand-file-name root))))
+        (or (string= (file-name-nondirectory root) "core")
+            (string= (file-name-nondirectory
+                      (directory-file-name (file-name-directory root)))
+                     "core")))))
+
   (transient-define-prefix emacs-kit/conductor ()
     "Conductor workspace orchestration."
     ["Workspaces"
@@ -474,6 +491,7 @@ Returns a hash table mapping cwd to the latest state string."
      ("p" "Project" emacs-kit/conductor-workspace-project)
      ("r" "Comment on diff" emacs-kit/conductor-comment-on-diff)]
     ["Services"
+     :if emacs-kit/conductor--core-context-p
      ("B" "Bootstrap emulators" emacs-kit/digits-bootstrap)
      ("S" "Start all services" emacs-kit/digits-start-all)
      ("G" "Start group" emacs-kit/digits-start-group)
