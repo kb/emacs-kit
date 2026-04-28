@@ -1425,10 +1425,14 @@ Ex: mpv file1 file2 file3 file4..."
   (eat-enable-auto-line-mode t))
 
 (use-package vterm
-  :ensure t)
+  :ensure t
+  :defer t
+  :custom
+  (vterm-shell (concat shell-file-name " -l")))
 
 (use-package claude-code
   :ensure t
+  :defer t
   :custom
   (claude-code-terminal-backend 'vterm)
   (claude-code-enable-notifications t))
