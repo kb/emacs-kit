@@ -16,6 +16,9 @@
 ;; Allow upgrading built-in packages (e.g. transient) from MELPA
 (setq package-install-upgrade-built-in t)
 
+;; Prefer newer source over stale byte-compiled Elisp.
+(setq load-prefer-newer t)
+
 (defcustom emacs-kit-avoid-flash-options
   '((enabled . t)
     (background . "#292D3E") ;; Catppuccin "#1e1e2e" or Crafters "#292D3E"

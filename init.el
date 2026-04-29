@@ -528,6 +528,11 @@ for ESLint."
   ;; Tell project.el filter out *special buffers* on `C-x p C-b'
   (setq project-buffers-viewer 'emacs-kit/filtered-project-buffer-completer)
 
+  ;; Extra actions on the `C-x p p' switch menu.
+  (with-eval-after-load 'project
+    (add-to-list 'project-switch-commands '(magit-project-status "Magit" ?m) t)
+    (add-to-list 'project-switch-commands '(project-dired "Home dir" ?h) t))
+
 
   ;; So eshell git commands open an instance of THIS config of Emacs
   (setenv "GIT_EDITOR" (format "emacs --init-dir=%s " (shell-quote-argument user-emacs-directory)))
@@ -1430,12 +1435,9 @@ Ex: mpv file1 file2 file3 file4..."
   :custom
   (vterm-shell (concat shell-file-name " -l")))
 
-(use-package claude-code
+(use-package agent-shell
   :ensure t
-  :defer t
-  :custom
-  (claude-code-terminal-backend 'vterm)
-  (claude-code-enable-notifications t))
+  :defer t)
 
 
 ;;; │ ESHELL
