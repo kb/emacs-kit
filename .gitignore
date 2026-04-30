@@ -9,3 +9,8 @@
 /projects
 /emacs-backup/
 /tree-sitter/
+/agent/
+/custom-vars.el
+/projects.eld
+/.org-id-locations
+/lisp/*.elc
