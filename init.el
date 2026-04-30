@@ -1437,7 +1437,17 @@ Ex: mpv file1 file2 file3 file4..."
 
 (use-package agent-shell
   :ensure t
-  :defer t)
+  :defer t
+  :init
+  (setq agent-shell-permission-responder-function
+        #'agent-shell-permission-allow-always
+        agent-shell-anthropic-default-session-mode-id
+        "bypassPermissions")
+  :config
+  (add-hook 'agent-shell-mode-hook
+            (lambda ()
+              (when (bound-and-true-p persp-mode)
+                (persp-add-buffer (current-buffer))))))
 
 
 ;;; │ ESHELL
