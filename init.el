@@ -1946,6 +1946,8 @@ For the current icon style."
   (eglot-autoshutdown t)
   (eglot-events-buffer-size 0) ;; EMACS-31 -- do we still need it?
   (eglot-events-buffer-config '(:size 0 :format full))
+  (eglot-sync-connect nil)     ;; async connect: don't block UI on slow LSPs
+  (eglot-connect-timeout 300)  ;; 5min; jdtls/kotlin-lsp need it
   (eglot-prefer-plaintext nil)
   (jsonrpc-event-hook nil)
   (eglot-code-action-indications nil) ;; EMACS-31 -- annoying as hell
@@ -1978,6 +1980,13 @@ For the current icon style."
           "eslint-lsp" "--stdio"
           "--"
           "tailwindcss-language-server" "--stdio"))))
+
+  ;; Use JetBrains' kotlin-lsp instead of fwcd kotlin-language-server.
+  ;; The IntelliJ-based server handles big Gradle monorepos far better.
+  (with-eval-after-load 'eglot
+    (add-to-list
+     'eglot-server-programs
+     '((kotlin-mode kotlin-ts-mode) . ("kotlin-lsp" "--stdio"))))
 
   :bind (:map
          eglot-mode-map
@@ -3026,6 +3035,33 @@ Shows the REPL in a window below, keeping focus in the code buffer."
 
 
 ;;; ├──────────────────── TREESITTER AREA
+
+;; Eager registration of every grammar source, before any ts-mode loads.
+;; The per-mode `:config' blocks below add the same entries lazily on
+;; first file open, but those race with the ts-mode body's own
+;; `treesit-auto-install-grammar' check -- losing the race means
+;; "Tree-sitter for X isn't available" errors and degraded fontification
+;; until the next file open.  Registering eagerly means the source is
+;; always present when the auto-install kicks in, regardless of which
+;; mode loads when.
+(with-eval-after-load 'treesit
+  (dolist (entry
+           '((bash             "https://github.com/tree-sitter/tree-sitter-bash"             "master"       "src")
+             (dockerfile       "https://github.com/camdencheek/tree-sitter-dockerfile"       "main"         "src")
+             (java             "https://github.com/tree-sitter/tree-sitter-java"             "master"       "src")
+             (javascript       "https://github.com/tree-sitter/tree-sitter-javascript"       "master"       "src")
+             (jsdoc            "https://github.com/tree-sitter/tree-sitter-jsdoc"            "master"       "src")
+             (kotlin           "https://github.com/fwcd/tree-sitter-kotlin"                  "main"         "src")
+             (markdown         "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown/src")
+             (markdown-inline  "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown-inline/src")
+             (ruby             "https://github.com/tree-sitter/tree-sitter-ruby"             "master"       "src")
+             (rust             "https://github.com/tree-sitter/tree-sitter-rust"             "master"       "src")
+             (toml             "https://github.com/ikatyang/tree-sitter-toml"                "master"       "src")
+             (tsx              "https://github.com/tree-sitter/tree-sitter-typescript"       "master"       "tsx/src")
+             (typescript       "https://github.com/tree-sitter/tree-sitter-typescript"       "master"       "typescript/src")
+             (yaml             "https://github.com/tree-sitter-grammars/tree-sitter-yaml"    "master"       "src")))
+    (add-to-list 'treesit-language-source-alist entry)))
+
 ;;; │ RUBY-TS-MODE
 (use-package ruby-ts-mode
   :ensure nil
@@ -3155,6 +3191,24 @@ As seen on: https://www.reddit.com/r/emacs/comments/1kfblch/need_help_with_addin
   (add-to-list 'treesit-language-source-alist '(rust "https://github.com/tree-sitter/tree-sitter-rust" "master" "src"))) ;; EMACS-31 this is now defined on mode code
 
 
+;;; │ JAVA-TS-MODE
+(use-package java-ts-mode
+  :ensure nil
+  :mode "\\.java\\'"
+  :defer t
+  :config
+  (add-to-list 'treesit-language-source-alist '(java "https://github.com/tree-sitter/tree-sitter-java" "master" "src")))
+
+
+;;; │ KOTLIN-TS-MODE
+(use-package kotlin-ts-mode
+  :ensure t
+  :mode ("\\.kts?\\'" . kotlin-ts-mode)
+  :defer t
+  :config
+  (add-to-list 'treesit-language-source-alist '(kotlin "https://github.com/fwcd/tree-sitter-kotlin" "main" "src")))
+
+
 ;;; │ TOML-TS-MODE
 (use-package toml-ts-mode
   :ensure toml-ts-mode
@@ -3193,6 +3247,20 @@ As seen on: https://www.reddit.com/r/emacs/comments/1kfblch/need_help_with_addin
   :defer t
   :config
   (add-to-list 'treesit-language-source-alist '(dockerfile "https://github.com/camdencheek/tree-sitter-dockerfile" "main" "src"))) ;; EMACS-31 this is now defined on mode code
+
+(defun emacs-kit/install-missing-treesit-grammars ()
+  "Install any grammar in `treesit-language-source-alist' that's not yet available.
+Belt-and-suspenders for `treesit-auto-install-grammar', which races
+with deferred mode loading and occasionally misses on first file open."
+  (interactive)
+  (dolist (entry treesit-language-source-alist)
+    (let ((lang (car entry)))
+      (unless (treesit-language-available-p lang)
+        (condition-case err
+            (treesit-install-language-grammar lang)
+          (error (message "tree-sitter %s install failed: %S" lang err)))))))
+
+(add-hook 'after-init-hook #'emacs-kit/install-missing-treesit-grammars)
 
 ;;; │ GO-TS-MODE
 (defun emacs-kit/go-common-setup ()

@@ -30,7 +30,10 @@ This works with bash, zsh, or fish)."
              ((string= shell-name "fish")
               "fish -c 'string join : $PATH'")
              ((string= shell-name "zsh")
-              "zsh -i -c 'printenv PATH'")
+              ;; -l (login) so /etc/zprofile's path_helper runs and adds
+              ;; /usr/local/bin etc.  -i alone skips that file on macOS,
+              ;; which is what bit cook-make / Eglot+gopls discovery.
+              "zsh -i -l -c 'printenv PATH'")
              ((string= shell-name "bash")
               "bash --login -c 'echo $PATH'")
              (t nil))))
