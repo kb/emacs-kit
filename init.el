@@ -3323,5 +3323,6 @@ with deferred mode loading and occasionally misses on first file open."
 (require 'emacs-kit-gh)
 (require 'emacs-kit-digits)
 (require 'emacs-kit-conductor)
+(require 'emacs-kit-magit-comment)
 (provide 'init)
 ;;; └ init.el ends here
