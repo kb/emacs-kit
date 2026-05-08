@@ -21,20 +21,19 @@
 
 (defcustom emacs-kit-avoid-flash-options
   '((enabled . t)
-    (background . "#292D3E") ;; Catppuccin "#1e1e2e" or Crafters "#292D3E"
-    (foreground . "#292D3E")
-    (reset-background . "#292D3E")
-    (reset-foreground . "#EEFFFF")) ;; Catppuccin "#cdd6f4" or Crafters "#EEFFFF"
+    (background . "#000000")
+    (foreground . "#000000")
+    (reset-background . "#000000")
+    (reset-foreground . "#ffffff"))
   "Options to avoid flash of light on Emacs startup.
-- `enabled`: Whether to apply the workaround.
-- `background`, `foreground`: Initial colors to use.
-- `reset-background`, `reset-foreground`: Optional explicit colors to restore after startup.
+- `enabled': whether to apply the workaround.
+- `background', `foreground': initial colors to paint the frame in
+  before init finishes loading the theme.
+- `reset-background', `reset-foreground': colors restored after init.
 
-NOTE: The default values here presented are set for the default
-`emacs-kit' custom theme.  If you'd like to turn this ON with another
-theme, change the background/foreground variables.
-
-If reset values are nil, nothing is reset."
+Defaults match built-in `modus-vivendi'.  If you switch themes,
+update these to match the new theme's bg/fg or the GUI flash
+prevention will paint the wrong color before the theme loads."
   :type '(alist :key-type symbol :value-type (choice (const nil) string))
   :group 'emacs-kit)
 

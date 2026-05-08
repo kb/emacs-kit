@@ -114,26 +114,6 @@ Add \\='nerd to the list to use Nerd Font glyphs instead."
   :type 'boolean
   :group 'emacs-kit)
 
-(defcustom emacs-kit-use-custom-theme 'crafters
-  "Select which emacs-kit customization theme to use.
-
-Valid values are:
-- \\='catppuccin
-- \\='crafters
-- \\='gits
-- \\='matrix
-- nil: Disable custom theme
-
-IMPORTANT NOTE: If you disable this or choose another theme, also check
-\\='emacs-kit-avoid-flash-options to ensure compatibility."
-  :type '(choice
-          (const :tag "Disabled" nil)
-          (const :tag "Catppuccin" catppuccin)
-          (const :tag "Crafters" crafters)
-          (const :tag "Matrix" matrix)
-          (const :tag "GITS" gits))
-  :group 'emacs-kit)
-
 (defcustom emacs-kit-enable-preferred-font t
   "Enable `emacs-kit-enable-preferred-font'."
   :type 'boolean
@@ -1671,10 +1651,8 @@ Check `emacs-kit/eshell-full-prompt' for more info.")
     (when (derived-mode-p 'eshell-mode)
       (eshell-reset)))
 
-  (defvar eshell-kit/color-bg-dark
-    (if (eq emacs-kit-use-custom-theme 'catppuccin) "#363a4f" "#212234"))
-  (defvar eshell-kit/color-bg-mid
-    (if (eq emacs-kit-use-custom-theme 'catppuccin) "#494d64" "#45475a"))
+  (defvar eshell-kit/color-bg-dark "#212234")
+  (defvar eshell-kit/color-bg-mid  "#45475a")
   (defvar eshell-kit/color-fg-user                            "#89b4fa")
   (defvar eshell-kit/color-fg-host                            "#b4befe")
   (defvar eshell-kit/color-fg-dir                             "#a6e3a1")
@@ -3447,9 +3425,9 @@ prompts to pick one.  With none, errors -- start one first via
 ;;  │ Each file is loaded here via `require'.
 ;;  │ See `lisp/*.el' for per-module documentation.
 (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
-;; Built-in modus-vivendi -- works cleanly on both GUI and TTY without the
-;; Catppuccin overrides in lisp/emacs-kit-themes.el (which leave the default
-;; face fg unspecified on TTY frames and break readability over ssh).
+;; Built-in modus-vivendi -- TTY-safe by design, no per-frame face fix-ups
+;; needed.  Was previously layered with Catppuccin/Crafters/etc.  palette
+;; overrides; see commits removing `emacs-kit-themes' for the rationale.
 (load-theme 'modus-vivendi t)
 
 ;; Decode application-keypad arrow keys on TTY.  Some terminals (notably
