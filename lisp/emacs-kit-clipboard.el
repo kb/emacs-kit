@@ -62,6 +62,22 @@
           (lambda ()
             (shell-command-to-string "wl-paste -n"))))
 
+   ;; Linux TTY without X11 (e.g. cook pod over ssh): use emacs's built-in
+   ;; xterm OSC 52 clipboard handler.  Setting `xterm-extra-capabilities'
+   ;; to include `setSelection' tells `xterm.el' to write the kill-ring
+   ;; through to the terminal's clipboard via OSC 52, which the Mac
+   ;; terminal (iTerm/Ghostty/Kitty/WezTerm) captures and writes to the
+   ;; host clipboard.  Routes through emacs's standard selection
+   ;; machinery rather than a hand-rolled `send-string-to-terminal' call,
+   ;; so the bytes are properly flushed and the redisplay state stays
+   ;; consistent.  OSC 52 is write-only -- pasting from the Mac clipboard
+   ;; back into emacs is handled by the terminal's own Cmd-V.
+   ((and (eq system-type 'gnu/linux)
+         (not (display-graphic-p))
+         (not (getenv "DISPLAY")))
+    (setq select-enable-clipboard t)
+    (setq xterm-extra-capabilities '(setSelection)))
+
    ;; Linux with xclip (X11)
    ((and (eq system-type 'gnu/linux)
          (getenv "DISPLAY")
