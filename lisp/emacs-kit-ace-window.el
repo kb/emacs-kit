@@ -75,7 +75,12 @@ With their assigned key labels ."
     (mapc 'delete-overlay emacs-kit-ace-window/quick-window-overlays)
     (setq emacs-kit-ace-window/quick-window-overlays nil))
 
-  (global-set-key (kbd "M-O") #'emacs-kit-ace-window/quick-window-jump))
+  ;; Skip the M-O binding on TTY -- terminal arrow keys send `ESC O <A|B|C|D>'
+  ;; in DECCKM application mode, and emacs reads `ESC O' as M-O, triggering
+  ;; this command and consuming the trailing letter as a window picker key
+  ;; instead of moving the cursor.  GUI keeps M-O for fast window jumping.
+  (when (display-graphic-p)
+    (global-set-key (kbd "M-O") #'emacs-kit-ace-window/quick-window-jump)))
 
 (provide 'emacs-kit-ace-window)
 ;;; emacs-kit-ace-window.el ends here
