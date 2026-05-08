@@ -57,31 +57,35 @@ prevention will paint the wrong color before the theme loads."
 ;; Do not native compile if on battery power
 (setopt native-comp-async-on-battery-power nil) ; EMACS-31
 
-;; HACK: avoid being flashbanged
+;; HACK: avoid being flashbanged.  Emacs paints the initial GUI frame with
+;; its hardcoded white default before init.el finishes loading the theme.
+;; Pre-seed `default-frame-alist' with the theme's bg/fg so the *creation*
+;; of the initial frame uses dark colors directly -- there's no flash to
+;; cover up because the frame is never white.
+;;
+;; Gate on `initial-window-system' (set BEFORE early-init runs) rather than
+;; `display-graphic-p' (which needs a frame to exist and so returns nil at
+;; early-init time).  Daemon and TTY launches have no flash to avoid.
 (defun emacs-kit/avoid-initial-flash-of-light ()
-  "Avoid flash of light when starting Emacs, based on `emacs-kit-avoid-flash-options`."
+  "Pre-paint the initial GUI frame using the colors in
+`emacs-kit-avoid-flash-options'.  See variable docstring."
   (when (alist-get 'enabled emacs-kit-avoid-flash-options)
-    (setq mode-line-format nil)
-    (set-face-attribute 'default nil
-                        :background (alist-get 'background emacs-kit-avoid-flash-options)
-                        :foreground (alist-get 'foreground emacs-kit-avoid-flash-options))))
+    (let ((bg (alist-get 'background emacs-kit-avoid-flash-options))
+          (fg (alist-get 'foreground emacs-kit-avoid-flash-options)))
+      (push `(background-color . ,bg) default-frame-alist)
+      (push `(foreground-color . ,fg) default-frame-alist)
+      (set-face-attribute 'default nil :background bg :foreground fg)
+      (setq mode-line-format nil))))
 
 (defun emacs-kit/reset-default-colors ()
-  "Reset any explicitly defined reset values in `emacs-kit-avoid-flash-options`."
+  "Restore reset colors after init completes loading the real theme."
   (when (alist-get 'enabled emacs-kit-avoid-flash-options)
     (let ((bg (alist-get 'reset-background emacs-kit-avoid-flash-options))
           (fg (alist-get 'reset-foreground emacs-kit-avoid-flash-options)))
-      (when bg
-        (set-face-attribute 'default nil :background bg))
-      (when fg
-        (set-face-attribute 'default nil :foreground fg)))))
+      (when bg (set-face-attribute 'default nil :background bg))
+      (when fg (set-face-attribute 'default nil :foreground fg)))))
 
-;; The flash-of-light hack only matters on GUI startup -- it pre-paints the
-;; frame in the theme's bg color so users don't see a white flash before
-;; init finishes.  On TTY there is no flash; running it forces the default
-;; face's fg/bg to hex values that downsample badly on some terminals,
-;; producing an invisible buffer.  Skip on TTY.
-(when (display-graphic-p)
+(when initial-window-system
   (emacs-kit/avoid-initial-flash-of-light)
   (add-hook 'after-init-hook #'emacs-kit/reset-default-colors))
 
