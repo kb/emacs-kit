@@ -138,7 +138,13 @@
      `(vc-dir-file ((,c :foreground "#89b4fa")))
      `(vc-dir-header-value ((,c :foreground "#b4befe")))))
   :init
-  (load-theme 'modus-vivendi t))
+  ;; Skip palette overrides on TTY -- their hex foregrounds leave the
+  ;; `default' face fg unspecified on TTY frames, collapsing plain text into
+  ;; the background.  Vanilla modus-vivendi renders cleanly in both modes.
+  (if (display-graphic-p)
+      (load-theme 'modus-vivendi t)
+    (let ((modus-themes-common-palette-overrides nil))
+      (load-theme 'modus-vivendi t))))
 
 
 ;;;  #SystemCrafters  Based Theme (hacked Modus)
@@ -262,7 +268,13 @@
      `(vc-dir-file ((,c :foreground "#82aaff")))
      `(vc-dir-header-value ((,c :foreground "#a1bfff")))))
   :init
-  (load-theme 'modus-vivendi-tinted t))
+  ;; Skip palette overrides on TTY -- their hex foregrounds leave the
+  ;; `default' face fg unspecified on TTY frames, collapsing plain text into
+  ;; the background.  Vanilla modus-vivendi-tinted renders cleanly in both modes.
+  (if (display-graphic-p)
+      (load-theme 'modus-vivendi-tinted t)
+    (let ((modus-themes-common-palette-overrides nil))
+      (load-theme 'modus-vivendi-tinted t))))
 
 ;;;  GITS             Based Theme (hacked Modus)
 (use-package modus-themes
@@ -385,7 +397,13 @@
      `(vc-dir-file ((,c :foreground "#00e5ff")))
      `(vc-dir-header-value ((,c :foreground "#68b8cc")))))
   :init
-  (load-theme 'modus-vivendi t))
+  ;; Skip palette overrides on TTY -- their hex foregrounds leave the
+  ;; `default' face fg unspecified on TTY frames, collapsing plain text into
+  ;; the background.  Vanilla modus-vivendi renders cleanly in both modes.
+  (if (display-graphic-p)
+      (load-theme 'modus-vivendi t)
+    (let ((modus-themes-common-palette-overrides nil))
+      (load-theme 'modus-vivendi t))))
 
 ;;;  Matrix           Based Theme (hacked Modus)
 (use-package modus-themes
@@ -527,7 +545,13 @@
      `(vc-dir-file ((,c :foreground "#00ff41")))
      `(vc-dir-header-value ((,c :foreground "#00c738")))))
   :init
-  (load-theme 'modus-vivendi t))
+  ;; Skip palette overrides on TTY -- their hex foregrounds leave the
+  ;; `default' face fg unspecified on TTY frames, collapsing plain text into
+  ;; the background.  Vanilla modus-vivendi renders cleanly in both modes.
+  (if (display-graphic-p)
+      (load-theme 'modus-vivendi t)
+    (let ((modus-themes-common-palette-overrides nil))
+      (load-theme 'modus-vivendi t))))
 
 (provide 'emacs-kit-themes)
 ;;; emacs-kit-themes.el ends here
