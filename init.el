@@ -454,9 +454,13 @@ for ESLint."
                      "show diff between the buffer and its file"))
 
   ;; On Terminal: changes the vertical separator to a full vertical line
-  ;;              and truncation symbol to a right arrow
-  (set-display-table-slot standard-display-table 'vertical-border ?\u2502)
-  (set-display-table-slot standard-display-table 'truncation ?\u2192)
+  ;;              and truncation symbol to a right arrow.
+  ;; Only set these glyphs on GUI -- pod terminals over ssh often lack the
+  ;; line-drawing range (U+2500+) and render every divider as `?'.  TTY
+  ;; falls back to the built-in ASCII `|' / `\' which always render.
+  (when (display-graphic-p)
+    (set-display-table-slot standard-display-table 'vertical-border ?\u2502)
+    (set-display-table-slot standard-display-table 'truncation ?\u2192))
 
   ;; Ibuffer filters
   (setq ibuffer-saved-filter-groups
@@ -651,8 +655,12 @@ or is an ERC buffer."
   (xterm-mouse-mode 1)
   (file-name-shadow-mode 1) ; allows us to type a new path without having to delete the current one
 
-  (with-current-buffer (get-buffer-create "*scratch*")
-    (insert (format ";;
+  ;; Scratch banner uses Unicode block-drawing chars that fall back to `?'
+  ;; glyphs on TTY frames over ssh.  Skip on TTY -- `initial-scratch-message'
+  ;; (set above) supplies a plain ASCII greeting in that case.
+  (when (display-graphic-p)
+    (with-current-buffer (get-buffer-create "*scratch*")
+      (insert (format ";;
 ;; ███████╗███╗   ███╗ █████╗  ██████╗███████╗    ██╗  ██╗██╗████████╗
 ;; ██╔════╝████╗ ████║██╔══██╗██╔════╝██╔════╝    ██║ ██╔╝██║╚══██╔══╝
 ;; █████╗  ██╔████╔██║███████║██║     ███████╗    █████╔╝ ██║   ██║
@@ -664,8 +672,8 @@ or is an ERC buffer."
 ;;   Packages     : %s
 ;;
 "
-                    (emacs-init-time)
-                    (number-to-string (length package-activated-list)))))
+                      (emacs-init-time)
+                      (number-to-string (length package-activated-list))))))
 
   (message (emacs-init-time)))
 
@@ -676,7 +684,12 @@ or is an ERC buffer."
 (use-package abbrev
   :ensure nil
   :init
-  (setq-default abbrev-mode t)
+  ;; abbrev-mode default off -- the table includes unicode/emoji expansions
+  ;; (`up' -> ☝️, `todo' -> 👷, etc.) that fire on any space after the
+  ;; trigger word and surprise more often than they help.  Re-enable per
+  ;; buffer with `M-x abbrev-mode' if you want the snippet expansions
+  ;; (imp, fn, cb, isodate, uuid, ...) for that session.
+  (setq-default abbrev-mode nil)
   :custom
   (save-abbrevs nil)
   :config
@@ -812,7 +825,7 @@ If ###@### is found, remove it and place point there at the end."
 ;;; │ AUTO-REVERT
 (use-package autorevert
   :ensure nil
-  :hook (emacs-startup-hook . global-auto-revert-mode)
+  :hook (emacs-startup . global-auto-revert-mode)
   :custom
   (auto-revert-remote-files nil)   ;; t makes tramp slow
   (auto-revert-verbose t)
@@ -1003,10 +1016,16 @@ If ###@### is found, remove it and place point there at the end."
               ("C-v" . icomplete-vertical-toggle)
               ("RET" . icomplete-force-complete-and-exit)
               ("C-j" . exit-minibuffer)) ;; So we can exit commands like `multi-file-replace-regexp-as-diff'
-  :hook
-  (after-init-hook . (lambda ()
-                       (fido-mode -1)
-                       (icomplete-vertical-mode 1)))
+  :init
+  ;; Use direct `add-hook' instead of use-package's `:hook' -- the dotted-pair
+  ;; form `(after-init . (lambda () ...))' evaluates to a flat list and
+  ;; use-package's normalizer drops the lambda silently.  `icomplete-mode'
+  ;; must be on for `icomplete-vertical-mode' to do anything visible.
+  (add-hook 'after-init-hook
+            (lambda ()
+              (fido-mode -1)
+              (icomplete-mode 1)
+              (icomplete-vertical-mode 1)))
   :config
   (setq icomplete-delay-completions-threshold 0)
   (setq icomplete-compute-delay 0)
@@ -1429,11 +1448,17 @@ Ex: mpv file1 file2 file3 file4..."
   :custom
   (eat-enable-auto-line-mode t))
 
-(use-package vterm
-  :ensure t
-  :defer t
-  :custom
-  (vterm-shell (concat shell-file-name " -l")))
+;; vterm is for running a shell *inside* emacs.  Inside a cook pod the
+;; emacs IS already inside a terminal -- a vterm there would be a shell
+;; in a terminal in a terminal, plus it needs libtool/libvterm-dev to
+;; compile the C module which the agent-runtime image doesn't ship.
+;; Gate on GUI so only the host Mac emacs installs/loads it.
+(when (display-graphic-p)
+  (use-package vterm
+    :ensure t
+    :defer t
+    :custom
+    (vterm-shell (concat shell-file-name " -l"))))
 
 (use-package agent-shell
   :ensure t
@@ -2000,7 +2025,7 @@ For the current icon style."
 (use-package flymake
   :ensure nil
   :defer t
-  :hook (prog-mode-hook . flymake-mode)
+  :hook (prog-mode . flymake-mode)
   :bind (:map flymake-mode-map
               ("M-8" . flymake-goto-next-error)
               ("M-7" . flymake-goto-prev-error)
@@ -2049,7 +2074,7 @@ and restart Flymake to apply the changes."
 (use-package whitespace
   :ensure nil
   :defer t
-  :hook (before-save-hook . whitespace-cleanup)
+  :hook (before-save . whitespace-cleanup)
   :init
   (defun emacs-kit/toggle-whitespace-cleanup-on-save ()
     "Toggle whitespace-cleanup on save."
@@ -2558,12 +2583,12 @@ As seen on: https://emacs.dyerdwelling.family/emacs/20250604085817-emacs--buildi
 (use-package electric-pair
   :ensure nil
   :defer
-  :hook (after-init-hook . electric-pair-mode))
+  :hook (after-init . electric-pair-mode))
 
 ;;; │ PAREN
 (use-package paren
   :ensure nil
-  :hook (after-init-hook . show-paren-mode)
+  :hook (after-init . show-paren-mode)
   :custom
   (show-paren-delay 0)
   (show-paren-style 'mixed)
@@ -2904,7 +2929,7 @@ Shows the REPL in a window below, keeping focus in the code buffer."
               ("C-c h"   . emacs-kit/cl-hyperspec-lookup)
               ("C-c C-m" . emacs-kit/cl-macroexpand)
               ("C-c M-m" . emacs-kit/cl-macroexpand-all))
-  :hook ((lisp-mode-hook . emacs-kit/cl-mode-setup))
+  :hook ((lisp-mode . emacs-kit/cl-mode-setup))
   :config
   (defun emacs-kit/cl--send-and-capture (expr)
     "Send EXPR to the inferior Lisp and return the output as a string."
@@ -3045,21 +3070,29 @@ Shows the REPL in a window below, keeping focus in the code buffer."
 ;; always present when the auto-install kicks in, regardless of which
 ;; mode loads when.
 (with-eval-after-load 'treesit
+  ;; Pin every grammar to a revision that compiles to ABI 14 -- emacs 30.1
+  ;; rejects the newer ABI 15 that current master/main branches emit
+  ;; (`version-mismatch: 15' in *Messages*).  Bump these when upgrading to
+  ;; emacs that accepts ABI 15.  Picks lean toward older-stable; if a
+  ;; specific grammar is silently failing, find a tag in the repo's history
+  ;; that pre-dates its ABI bump and try that.
   (dolist (entry
-           '((bash             "https://github.com/tree-sitter/tree-sitter-bash"             "master"       "src")
-             (dockerfile       "https://github.com/camdencheek/tree-sitter-dockerfile"       "main"         "src")
-             (java             "https://github.com/tree-sitter/tree-sitter-java"             "master"       "src")
-             (javascript       "https://github.com/tree-sitter/tree-sitter-javascript"       "master"       "src")
-             (jsdoc            "https://github.com/tree-sitter/tree-sitter-jsdoc"            "master"       "src")
-             (kotlin           "https://github.com/fwcd/tree-sitter-kotlin"                  "main"         "src")
-             (markdown         "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown/src")
-             (markdown-inline  "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown-inline/src")
-             (ruby             "https://github.com/tree-sitter/tree-sitter-ruby"             "master"       "src")
-             (rust             "https://github.com/tree-sitter/tree-sitter-rust"             "master"       "src")
-             (toml             "https://github.com/ikatyang/tree-sitter-toml"                "master"       "src")
-             (tsx              "https://github.com/tree-sitter/tree-sitter-typescript"       "master"       "tsx/src")
-             (typescript       "https://github.com/tree-sitter/tree-sitter-typescript"       "master"       "typescript/src")
-             (yaml             "https://github.com/tree-sitter-grammars/tree-sitter-yaml"    "master"       "src")))
+           '((bash             "https://github.com/tree-sitter/tree-sitter-bash"             "v0.23.3"      "src")
+             (dockerfile       "https://github.com/camdencheek/tree-sitter-dockerfile"       "v0.2.0"       "src")
+             (go               "https://github.com/tree-sitter/tree-sitter-go"               "v0.21.0"      "src")
+             (gomod            "https://github.com/camdencheek/tree-sitter-go-mod"           "v1.0.2"       "src")
+             (java             "https://github.com/tree-sitter/tree-sitter-java"             "v0.23.2"      "src")
+             (javascript       "https://github.com/tree-sitter/tree-sitter-javascript"       "v0.21.4"      "src")
+             (jsdoc            "https://github.com/tree-sitter/tree-sitter-jsdoc"            "v0.21.0"      "src")
+             (kotlin           "https://github.com/fwcd/tree-sitter-kotlin"                  "0.3.8"        "src")
+             (markdown         "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "v0.4.1"      "tree-sitter-markdown/src")
+             (markdown-inline  "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "v0.4.1"      "tree-sitter-markdown-inline/src")
+             (ruby             "https://github.com/tree-sitter/tree-sitter-ruby"             "v0.21.0"      "src")
+             (rust             "https://github.com/tree-sitter/tree-sitter-rust"             "v0.23.3"      "src")
+             (toml             "https://github.com/ikatyang/tree-sitter-toml"                "v0.5.1"       "src")
+             (tsx              "https://github.com/tree-sitter/tree-sitter-typescript"       "v0.21.2"      "tsx/src")
+             (typescript       "https://github.com/tree-sitter/tree-sitter-typescript"       "v0.21.2"      "typescript/src")
+             (yaml             "https://github.com/tree-sitter-grammars/tree-sitter-yaml"    "v0.6.1"       "src")))
     (add-to-list 'treesit-language-source-alist entry)))
 
 ;;; │ RUBY-TS-MODE
@@ -3218,17 +3251,17 @@ As seen on: https://www.reddit.com/r/emacs/comments/1kfblch/need_help_with_addin
   (add-to-list 'treesit-language-source-alist '(toml "https://github.com/ikatyang/tree-sitter-toml" "master" "src")))  ;; EMACS-31 this is now defined on mode code
 
 
-;;; │ MARKDOWN-TS-MODE - EMACS-31
-;;  As I first proposed here:
-;;  https://lists.gnu.org/archive/html/emacs-devel/2025-02/msg00810.html
+;;; │ MARKDOWN-TS-MODE
+;;  Built-in on Emacs 31 (proposed in
+;;  https://lists.gnu.org/archive/html/emacs-devel/2025-02/msg00810.html);
+;;  on Emacs 30 we pull the MELPA backport so .md files use tree-sitter
+;;  highlighting instead of falling back to fundamental-mode.  Grammar
+;;  source entries are already registered in the eager block above with
+;;  ABI-14 pins, so no `:config' add-to-list churn here.
 (use-package markdown-ts-mode
-  :ensure nil
+  :ensure t
   :mode "\\.md\\'"
-  :defer t
-  :config
-  ;; (add-to-list 'major-mode-remap-alist '(markdown-mode . markdown-ts-mode))
-  (add-to-list 'treesit-language-source-alist '(markdown "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown/src"))  ;; EMACS-31 this is now defined on mode code
-  (add-to-list 'treesit-language-source-alist '(markdown-inline "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "split_parser" "tree-sitter-markdown-inline/src")))  ;; EMACS-31 this is now defined on mode code
+  :defer t)
 
 
 ;;; │ YAML-TS-MODE
@@ -3253,12 +3286,18 @@ As seen on: https://www.reddit.com/r/emacs/comments/1kfblch/need_help_with_addin
 Belt-and-suspenders for `treesit-auto-install-grammar', which races
 with deferred mode loading and occasionally misses on first file open."
   (interactive)
-  (dolist (entry treesit-language-source-alist)
-    (let ((lang (car entry)))
-      (unless (treesit-language-available-p lang)
-        (condition-case err
-            (treesit-install-language-grammar lang)
-          (error (message "tree-sitter %s install failed: %S" lang err)))))))
+  ;; treesit autoloads on first ts-mode use; on a fresh emacs it isn't loaded
+  ;; yet and `treesit-language-source-alist' is void.  Without this guard the
+  ;; void-variable error aborts `after-init-hook' and drops every hook
+  ;; function added later (e.g. icomplete-vertical activation).
+  (require 'treesit nil 'noerror)
+  (when (boundp 'treesit-language-source-alist)
+    (dolist (entry treesit-language-source-alist)
+      (let ((lang (car entry)))
+        (unless (treesit-language-available-p lang)
+          (condition-case err
+              (treesit-install-language-grammar lang)
+            (error (message "tree-sitter %s install failed: %S" lang err))))))))
 
 (add-hook 'after-init-hook #'emacs-kit/install-missing-treesit-grammars)
 
@@ -3280,17 +3319,161 @@ with deferred mode loading and occasionally misses on first file open."
    (go-mod-ts-mode-hook . emacs-kit/go-common-setup))
   :defer t)
 
+;;; │ SQL -- Cloud Spanner (via spanner-cli + emulator)
+;;
+;; `sql.el' is built-in.  Spanner isn't a known product, so register it
+;; here.  Connects to whatever the emulator is bound to in the running
+;; environment (`make' sets SPANNER_EMULATOR_HOST=localhost:9010).
+;; Customize project/instance/database per workspace if they differ from
+;; the digits-test defaults.
+(defcustom emacs-kit-spanner-project   "local-dev"   "Spanner project for `emacs-kit/sql-spanner'." :type 'string :group 'emacs-kit)
+(defcustom emacs-kit-spanner-instance  "local-test"  "Spanner instance for `emacs-kit/sql-spanner'." :type 'string :group 'emacs-kit)
+(defcustom emacs-kit-spanner-database  "accounting"  "Default Spanner database; `emacs-kit/sql-spanner' prompts with this preselected." :type 'string :group 'emacs-kit)
+(defcustom emacs-kit-spanner-admin-endpoint "http://localhost:9020"
+  "Spanner emulator admin REST API endpoint, used to list databases."
+  :type 'string :group 'emacs-kit)
+
+(defvar sql-spanner-options nil
+  "Command-line options passed to spanner-cli when starting `sql-spanner'.
+Set per-call by `emacs-kit/sql-spanner' from the
+`emacs-kit-spanner-{project,instance,database}' customizations.")
+
+(use-package sql
+  :ensure nil
+  :defer t
+  :config
+  (sql-add-product 'spanner "Cloud Spanner"
+                   :sqli-program "spanner-cli"
+                   :sqli-options 'sql-spanner-options
+                   :prompt-regexp "^spanner> "
+                   :prompt-cont-regexp "^      -> "))
+
+(defun emacs-kit/sql-spanner--list-databases ()
+  "Return the list of database names from the running emulator.
+Queries the admin REST API at `emacs-kit-spanner-admin-endpoint'.
+Returns nil if the emulator is unreachable, in which case
+`emacs-kit/sql-spanner' falls back to a plain prompt."
+  (require 'json)
+  (let ((url (format "%s/v1/projects/%s/instances/%s/databases"
+                     emacs-kit-spanner-admin-endpoint
+                     emacs-kit-spanner-project
+                     emacs-kit-spanner-instance)))
+    (with-temp-buffer
+      (when (zerop (call-process "curl" nil t nil "-sS" "--max-time" "3" url))
+        (goto-char (point-min))
+        (let* ((data (ignore-errors (json-parse-buffer :object-type 'alist)))
+               (dbs  (alist-get 'databases data)))
+          (mapcar (lambda (d)
+                    (file-name-nondirectory (alist-get 'name d)))
+                  (and (vectorp dbs) (append dbs nil))))))))
+
+;;;###autoload
+(defun emacs-kit/sql-spanner (&optional database)
+  "Start a `sql-spanner' REPL against the local Spanner emulator.
+Prompts for DATABASE (with completion from the live emulator
+list when reachable; default `emacs-kit-spanner-database').  Sets
+SPANNER_EMULATOR_HOST and the spanner-cli -p/-i/-d flags, then
+enters `sql-interactive-mode' for the spanner product."
+  (interactive
+   (let* ((dbs (emacs-kit/sql-spanner--list-databases))
+          (default emacs-kit-spanner-database)
+          (db (if dbs
+                  (completing-read (format "Database (default %s): " default)
+                                   dbs nil t nil nil default)
+                (read-string (format "Database (default %s): " default)
+                             nil nil default))))
+     (list db)))
+  (require 'sql)
+  (require 'comint)
+  ;; Skip `sql-product-interactive' -- it has version-dependent edge cases
+  ;; that silently return without creating a buffer.  Spawn the comint
+  ;; subprocess directly, then layer `sql-interactive-mode' on top so we
+  ;; still get prompt parsing, send-region, history, etc.
+  (let* ((bare-name (format "spanner [%s]" database))
+         (full-name (format "*%s*" bare-name))
+         (process-environment
+          (cons (concat "SPANNER_EMULATOR_HOST="
+                        (or (getenv "SPANNER_EMULATOR_HOST")
+                            "localhost:9010"))
+                process-environment))
+         (buf (apply #'make-comint bare-name
+                     (or (executable-find "spanner-cli")
+                         (user-error "spanner-cli not found on PATH"))
+                     nil
+                     (list "-p" emacs-kit-spanner-project
+                           "-i" emacs-kit-spanner-instance
+                           "-d" database))))
+    (with-current-buffer buf
+      (let ((sql-product 'spanner))
+        (sql-interactive-mode)))
+    (pop-to-buffer buf)))
+
+(defun emacs-kit/sql-spanner--live-buffers ()
+  "Return live spanner-cli comint buffers, most-recently-used first."
+  (seq-filter
+   (lambda (b)
+     (and (buffer-live-p b)
+          (string-prefix-p "*spanner [" (buffer-name b))
+          (get-buffer-process b)))
+   (buffer-list)))
+
+;;;###autoload
+(defun emacs-kit/sql-spanner-send-region (start end)
+  "Send region START..END to a running `emacs-kit/sql-spanner' session.
+With a single live spanner session, sends to it.  With multiple,
+prompts to pick one.  With none, errors -- start one first via
+`emacs-kit/sql-spanner'."
+  (interactive "r")
+  (require 'sql)
+  (let* ((buffers (emacs-kit/sql-spanner--live-buffers))
+         (target (cond
+                  ((null buffers)
+                   (user-error "No live spanner session -- M-x emacs-kit/sql-spanner first"))
+                  ((null (cdr buffers)) (car buffers))
+                  (t (get-buffer
+                      (completing-read "Send to: "
+                                       (mapcar #'buffer-name buffers)
+                                       nil t))))))
+    (let ((sql-buffer target))
+      (sql-send-region start end))))
+
+(with-eval-after-load 'sql
+  (define-key sql-mode-map (kbd "C-c C-s") #'emacs-kit/sql-spanner-send-region))
+
+
 ;;; ├──────────────────── EMACS KIT Extra Packages
 ;;  │
 ;;  │ Self-contained modules that live under the `lisp/' directory.
 ;;  │ Each file is loaded here via `require'.
 ;;  │ See `lisp/*.el' for per-module documentation.
 (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
-(require 'emacs-kit-themes)
+;; Built-in modus-vivendi -- works cleanly on both GUI and TTY without the
+;; Catppuccin overrides in lisp/emacs-kit-themes.el (which leave the default
+;; face fg unspecified on TTY frames and break readability over ssh).
+(load-theme 'modus-vivendi t)
+
+;; Decode application-keypad arrow keys on TTY.  Some terminals (notably
+;; ssh-into-pod sessions) send `ESC O <letter>' for arrows; without these
+;; bindings, emacs reads `ESC O' as M-O and `ace-window' (bound to M-o)
+;; eats the trailing A/B/C/D as a "window picker" key, producing
+;; "no window assigned to key: A" instead of cursor movement.
+(unless (display-graphic-p)
+  (define-key input-decode-map "\eOA" [up])
+  (define-key input-decode-map "\eOB" [down])
+  (define-key input-decode-map "\eOC" [right])
+  (define-key input-decode-map "\eOD" [left])
+  (define-key input-decode-map "\eOH" [home])
+  (define-key input-decode-map "\eOF" [end]))
+
 (require 'emacs-kit-movements)
 (require 'emacs-kit-formatter)
-(require 'emacs-kit-transparency)
-(require 'emacs-kit-mode-line)
+;; GUI-only cosmetic modules.  Each pulls in nerd-font glyphs, child frames,
+;; or other GUI rendering primitives that produce broken output on a TTY
+;; (`?' glyphs from the icon fonts, invisible mode-line segments, etc.).
+;; Gate on `display-graphic-p' so the same config loads cleanly inside a
+;; cook pod over ssh.
+(when (display-graphic-p) (require 'emacs-kit-transparency))
+(when (display-graphic-p) (require 'emacs-kit-mode-line))
 (require 'emacs-kit-exec-path-from-shell)
 (require 'emacs-kit-rainbow-delimiters)
 (require 'emacs-kit-project-select)
@@ -3308,17 +3491,17 @@ with deferred mode loading and occasionally misses on first file open."
 (require 'emacs-kit-ai)
 (require 'emacs-kit-dired-gutter)
 (require 'emacs-kit-dired-mpv)
-(require 'emacs-kit-icons)
-(require 'emacs-kit-icons-dired)
-(require 'emacs-kit-icons-ibuffer)
-(require 'emacs-kit-icons-eshell)
+(when (display-graphic-p) (require 'emacs-kit-icons))
+(when (display-graphic-p) (require 'emacs-kit-icons-dired))
+(when (display-graphic-p) (require 'emacs-kit-icons-ibuffer))
+(when (display-graphic-p) (require 'emacs-kit-icons-eshell))
 (require 'emacs-kit-container)
 (require 'emacs-kit-m3u)
 (require 'emacs-kit-clipboard)
-(require 'emacs-kit-eldoc-box)
+(when (display-graphic-p) (require 'emacs-kit-eldoc-box))
 (require 'emacs-kit-khard)
 (require 'emacs-kit-flymake-eslint)
-(require 'emacs-kit-erc-image)
+(when (display-graphic-p) (require 'emacs-kit-erc-image))
 (require 'emacs-kit-yt)
 (require 'emacs-kit-gh)
 (require 'emacs-kit-digits)
