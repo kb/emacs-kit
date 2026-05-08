@@ -77,8 +77,14 @@ If reset values are nil, nothing is reset."
       (when fg
         (set-face-attribute 'default nil :foreground fg)))))
 
-(emacs-kit/avoid-initial-flash-of-light)
-(add-hook 'after-init-hook #'emacs-kit/reset-default-colors)
+;; The flash-of-light hack only matters on GUI startup -- it pre-paints the
+;; frame in the theme's bg color so users don't see a white flash before
+;; init finishes.  On TTY there is no flash; running it forces the default
+;; face's fg/bg to hex values that downsample badly on some terminals,
+;; producing an invisible buffer.  Skip on TTY.
+(when (display-graphic-p)
+  (emacs-kit/avoid-initial-flash-of-light)
+  (add-hook 'after-init-hook #'emacs-kit/reset-default-colors))
 
 
 ;; Always start Emacs and new frames maximized
