@@ -792,8 +792,11 @@ If ###@### is found, remove it and place point there at the end."
   :defer t
   :config
   (setq epg-pinentry-mode 'loopback)
+  ;; Plain ~/.authinfo holds only the cred-proxy virtual key (vk_github_sandbox,
+  ;; not a real secret) for Forge in cook pods; the .gpg file holds real secrets.
   (setq auth-sources
-        (list (expand-file-name ".authinfo.gpg" user-emacs-directory)))
+        (list (expand-file-name ".authinfo.gpg" user-emacs-directory)
+              "~/.authinfo"))
   (setq user-full-name "User Name and Surnames"
         user-mail-address "user@mail.com")
 
