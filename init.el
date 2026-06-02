@@ -1896,6 +1896,14 @@ For the current icon style."
   :ensure t
   :bind ("C-x g" . magit-status))
 
+;;; │ FORGE — GitHub/GitLab PRs & issues inside magit.
+;;; In a cook pod, auth flows through the cred-proxy: ~/.authinfo holds the
+;;; virtual key `vk_github_sandbox' (not a real secret), which the proxy swaps
+;;; for the real token on the wire.  See 22-forge-authinfo.sh dev-profile recipe.
+(use-package forge
+  :ensure t
+  :after magit)
+
 
 ;;; │ SMERGE
 (use-package smerge-mode
