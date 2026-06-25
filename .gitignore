@@ -14,3 +14,6 @@
 /projects.eld
 /.org-id-locations
 /lisp/*.elc
+/lisp/*.elc.*
+/forge-database.sqlite
+/.agent-shell/
