@@ -892,9 +892,15 @@ If ###@### is found, remove it and place point there at the end."
 ;;; │ PERSPECTIVE
 (use-package perspective
   :ensure t
+  :bind (("C-x b" . persp-switch-to-buffer*)
+         ("C-x C-b" . persp-ibuffer))
   :custom
   (persp-mode-prefix-key (kbd "C-x x"))
   (persp-modestring-short t)
+  ;; `persp-switch-to-buffer*' only offers the current perspective's buffers by
+  ;; default.  This controls what happens when a non-current buffer is selected
+  ;; explicitly, e.g. with C-u C-x b.
+  (persp-switch-to-buffer-behavior 'switch)
   :init
   (persp-mode)
   :config
