@@ -23,6 +23,7 @@
 (declare-function persp-switch "perspective" (name &optional norecord))
 (declare-function persp-add-buffer "perspective" (buffer-or-name))
 (defvar ghostel-buffer-name)
+(defvar ghostel-buffer-name-function)
 (defvar ghostel-tramp-shells)
 (defvar persp-mode)
 
@@ -190,6 +191,14 @@ The command runs `cook rm --force BRANCH' after Emacs confirmation."
         (user-error "No cook pods found in %s" emacs-kit/cook-ssh-config))
       (completing-read "Cook pod: " hosts nil t)))
 
+  (defun emacs-kit/cook--claude-command (host)
+    "Return the Claude command to run for cook pod HOST.
+Naming the session after the pod prevents Claude's terminal title and
+prompt from making a new pod workspace look like it belongs to a previous
+pod's conversation."
+    (format "claude --name %s"
+            (shell-quote-argument (emacs-kit/cook--label host))))
+
   (defun emacs-kit/cook--terminal (host title &optional command)
     "Open ghostel terminal TITLE on cook pod HOST; return its buffer.
 A live buffer for the same HOST/TITLE is reused.  With COMMAND non-nil,
@@ -212,6 +221,13 @@ pod tools like `claude')."
            (ghostel-buffer-name
             (format "*%s:%s*" (emacs-kit/cook--label host) title))
            (buffer (ghostel)))
+      ;; Ghostel normally renames buffers to whatever OSC title the TUI reports
+      ;; (Claude uses its session name).  In cook workspaces that makes a new
+      ;; pod's terminal look like the previous pod if Claude offers/resumes an
+      ;; old conversation.  Keep the stable pod/title buffer name instead.
+      (with-current-buffer buffer
+        (setq-local ghostel-buffer-name-function nil)
+        (rename-buffer ghostel-buffer-name t))
       (when command
         (run-at-time
          0.6 nil
@@ -264,7 +280,8 @@ running terminals."
                  (stack (with-selected-window right
                           (split-window-below))))
             (emacs-kit/cook--display-terminal
-             right host "claude" (and emacs-kit/cook-autostart-claude "claude"))
+             right host "claude" (and emacs-kit/cook-autostart-claude
+                                       (emacs-kit/cook--claude-command host)))
             (emacs-kit/cook--display-terminal
              stack host "stack" (and emacs-kit/cook-autostart-stack "make core")))
           (select-window files)))))
