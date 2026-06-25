@@ -141,7 +141,7 @@ If MANUAL is non-nil, save the buffer before formatting."
 
   (add-hook 'find-file-hook #'emacs-kit-formatter--maybe-enable)
 
-  (global-set-key (kbd "C-c p") #'emacs-kit-formatter/format-current-file-manual)
+  (global-set-key (kbd "C-c f f") #'emacs-kit-formatter/format-current-file-manual)
   (global-set-key (kbd "C-c C-p") #'emacs-kit-formatter/format-current-file-manual)
   (global-set-key (kbd "C-c t f") #'emacs-kit-formatter/toggle-format-on-save))
 
