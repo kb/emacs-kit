@@ -444,8 +444,6 @@ for ESLint."
 
   (setopt tramp-persistency-file-name (expand-file-name "cache/tramp" user-emacs-directory))
 
-  (setopt viper-custom-file-name (expand-file-name "cache/viper" user-emacs-directory))
-
   ;; Set line-number-mode with relative numbering
   (setq display-line-numbers-type 'relative)
   (add-hook 'prog-mode-hook #'display-line-numbers-mode)
@@ -3577,7 +3575,6 @@ prompts to pick one.  With none, errors -- start one first via
 (require 'emacs-kit-exec-path-from-shell)
 (require 'emacs-kit-rainbow-delimiters)
 (require 'emacs-kit-project-select)
-(require 'emacs-kit-viper-extensions)
 (when (display-graphic-p) (require 'emacs-kit-cook))
 (require 'emacs-kit-highlight-keywords)
 (require 'emacs-kit-gutter)
