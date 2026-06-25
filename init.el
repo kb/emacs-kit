@@ -130,20 +130,6 @@ Examples: `Maple Mono NF' or `JetBrainsMono Nerd Font'."
   :type '(repeat integer)
   :group 'emacs-kit)
 
-(defcustom emacs-kit-ai-scratch-path nil
-  "If non-nil, AI commands run from this directory.
-This allows using a specific environment or scratch context."
-  :type '(choice (const :tag "Disabled" nil)
-                 (directory :tag "AI Scratch Directory"))
-  :group 'emacs-kit)
-
-(defcustom emacs-kit-enable-erc-image t
-  "Whether to enable inline image support in ERC buffers.
-This is enabled by default and allows displaying images directly from
-URLs posted in ERC channels."
-  :type 'boolean
-  :group 'emacs-kit)
-
 (defcustom emacs-kit-enable-auto-formatter t
   "Whether to automatically enable format-on-save for files.
 Respects the `emacs-kit-formatter-alist'.  When non-nil, opening a file whose
@@ -3841,13 +3827,10 @@ prompts to pick one.  With none, errors -- start one first via
 (require 'emacs-kit-gutter)
 (require 'emacs-kit-ace-window)
 (require 'emacs-kit-olivetti)
-(require 'emacs-kit-0x0)
 (require 'emacs-kit-sudo-edit)
 (require 'emacs-kit-replace-as-diff)
 (require 'emacs-kit-weather)
-(require 'emacs-kit-rate)
 (require 'emacs-kit-how-in)
-(require 'emacs-kit-ai)
 (require 'emacs-kit-dired-gutter)
 (require 'emacs-kit-dired-mpv)
 (when (display-graphic-p) (require 'emacs-kit-icons))
@@ -3855,14 +3838,9 @@ prompts to pick one.  With none, errors -- start one first via
 (when (display-graphic-p) (require 'emacs-kit-icons-ibuffer))
 (when (display-graphic-p) (require 'emacs-kit-icons-eshell))
 (require 'emacs-kit-container)
-(require 'emacs-kit-m3u)
 (require 'emacs-kit-clipboard)
 (when (display-graphic-p) (require 'emacs-kit-eldoc-box))
-(require 'emacs-kit-khard)
 (require 'emacs-kit-flymake-eslint)
-(when (display-graphic-p) (require 'emacs-kit-erc-image))
-(require 'emacs-kit-yt)
-(require 'emacs-kit-gh)
 (require 'emacs-kit-digits)
 (require 'emacs-kit-conductor)
 (require 'emacs-kit-magit-comment)
