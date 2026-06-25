@@ -26,6 +26,8 @@
 (defvar ghostel-buffer-name-function)
 (defvar ghostel-tramp-shells)
 (defvar persp-mode)
+(defvar-local emacs-kit/claude-tui-buffer nil
+  "Non-nil when this buffer is a Claude TUI target for Emacs Kit helpers.")
 
 (use-package emacs-kit-cook
   :ensure nil
@@ -227,6 +229,7 @@ pod tools like `claude')."
       ;; old conversation.  Keep the stable pod/title buffer name instead.
       (with-current-buffer buffer
         (setq-local ghostel-buffer-name-function nil)
+        (setq-local emacs-kit/claude-tui-buffer (string= title "claude"))
         (rename-buffer ghostel-buffer-name t))
       (when command
         (run-at-time
