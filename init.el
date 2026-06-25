@@ -2722,6 +2722,10 @@ arg or non-nil REVERSE, cycle backwards."
        (shell . t)))
     (setq org-confirm-babel-evaluate nil)
 
+  (with-eval-after-load 'org-src
+    (add-to-list 'org-src-lang-modes '("protobuf" . protobuf-ts))
+    (add-to-list 'org-src-lang-modes '("proto" . protobuf-ts)))
+
   ;; Capture
   (setq org-directory "~/Documents/org"
         org-default-notes-file (expand-file-name "inbox.org" org-directory))
@@ -3140,6 +3144,8 @@ Shows the REPL in a window below, keeping focus in the code buffer."
              (kotlin           "https://github.com/fwcd/tree-sitter-kotlin"                  "0.3.8"        "src")
              (markdown         "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "v0.4.1"      "tree-sitter-markdown/src")
              (markdown-inline  "https://github.com/tree-sitter-grammars/tree-sitter-markdown" "v0.4.1"      "tree-sitter-markdown-inline/src")
+             ;; Upstream has no tags; main currently emits ABI 14 for Emacs 30.
+             (proto            "https://github.com/treywood/tree-sitter-proto"                "main"         "src")
              (ruby             "https://github.com/tree-sitter/tree-sitter-ruby"             "v0.21.0"      "src")
              (rust             "https://github.com/tree-sitter/tree-sitter-rust"             "v0.23.3"      "src")
              (toml             "https://github.com/ikatyang/tree-sitter-toml"                "v0.5.1"       "src")
@@ -3333,6 +3339,21 @@ As seen on: https://www.reddit.com/r/emacs/comments/1kfblch/need_help_with_addin
   :defer t
   :config
   (add-to-list 'treesit-language-source-alist '(dockerfile "https://github.com/camdencheek/tree-sitter-dockerfile" "main" "src"))) ;; EMACS-31 this is now defined on mode code
+
+
+;;; │ PROTOBUF-TS-MODE
+(use-package protobuf-ts-mode
+  :ensure t
+  :mode "\\.proto\\'"
+  :defer t
+  :hook
+  ((protobuf-ts-mode-hook . (lambda ()
+                              (setq indent-tabs-mode nil))))
+  :custom
+  (protobuf-ts-mode-indent-offset 2)
+  :config
+  (add-to-list 'treesit-language-source-alist
+               '(proto "https://github.com/treywood/tree-sitter-proto" "main" "src")))
 
 (defun emacs-kit/install-missing-treesit-grammars ()
   "Install any grammar in `treesit-language-source-alist' that's not yet available.
