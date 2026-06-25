@@ -174,8 +174,21 @@ for ESLint."
 ;;; │ EMACS
 (use-package emacs
   :ensure nil
+  :preface
+  (defun emacs-kit/reload-config ()
+    "Save and reload the current Emacs init file."
+    (interactive)
+    (let ((init-file (or user-init-file
+                         (expand-file-name "init.el" user-emacs-directory))))
+      (when-let* ((buffer (find-buffer-visiting init-file)))
+        (with-current-buffer buffer
+          (when (buffer-modified-p)
+            (save-buffer))))
+      (load-file init-file)
+      (message "Reloaded %s" (abbreviate-file-name init-file))))
   :bind                                              ; NOTE: M-x describe-personal-bindings (for all use-packge binds)
   (("M-o" . other-window)
+   ("C-c R" . emacs-kit/reload-config)
    ("M-g r" . recentf)
    ("M-s g" . grep)
    ("C-x ;" . comment-line)
@@ -355,6 +368,19 @@ for ESLint."
   ;; Makes everything accept utf-8 as default, so buffers with tsx and so
   ;; won't ask for encoding (because undecided-unix) every single keystroke
   (modify-coding-system-alist 'file "" 'utf-8)
+
+  ;; Force UTF-8 across input/output channels.  TTY emacs over ssh into a
+  ;; pod with a POSIX/C locale leaves `keyboard-coding-system' at
+  ;; `no-conversion' and `terminal-coding-system' at nil, which makes every
+  ;; multi-byte char (emoji, em-dash, arrows, ✅ ⏸ → × etc.) render as `?'
+  ;; because emacs reads each UTF-8 byte as a raw non-printable.  Setting
+  ;; the language env to UTF-8 fixes input, output, and process I/O coding
+  ;; regardless of what the surrounding shell locale is.
+  (set-language-environment "UTF-8")
+  (prefer-coding-system        'utf-8-unix)
+  (set-terminal-coding-system  'utf-8-unix)
+  (set-keyboard-coding-system  'utf-8-unix)
+  (setq locale-coding-system   'utf-8-unix)
 
   ;; Setup preferred fonts when present on System
   (declare-function emacs-kit/setup-font "")
