@@ -39,7 +39,6 @@ otherwise mode-based emoji."
          ((derived-mode-p 'erc-mode)    (emacs-kit/file-icon "hash"))
          ((derived-mode-p 'rcirc-mode)  (emacs-kit/file-icon "hash"))
          ((derived-mode-p 'gnus-mode)   (emacs-kit/file-icon "mail"))
-         ((derived-mode-p 'newsticker-treeview-mode)   (emacs-kit/file-icon "news"))
          (t                             (emacs-kit/file-icon "wranch"))))))
 
   (define-ibuffer-column icon
