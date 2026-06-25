@@ -2627,6 +2627,34 @@ As seen on: https://emacs.dyerdwelling.family/emacs/20250604085817-emacs--buildi
   :defer t
   :mode ("\\.org\\'" . org-mode)
   :hook (org-mode . visual-line-mode)
+  :preface
+  (defun kb/org-open-inbox ()
+    "Open `org-default-notes-file'."
+    (interactive)
+    (require 'org)
+    (find-file org-default-notes-file))
+  (defun kb/org-todo-cycle-all (&optional reverse)
+    "Cycle the heading's TODO keyword through keywords without logging
+triggers (flattened across sequences in `org-todo-keywords-1'), plus a
+no-keyword state. Keywords with note/timestamp triggers (e.g. WAITING)
+are skipped — set them explicitly via `C-c C-t <letter>'. With prefix
+arg or non-nil REVERSE, cycle backwards."
+    (interactive "P")
+    (require 'org)
+    (let* ((keywords (append (seq-remove (lambda (kw)
+                                           (assoc kw org-todo-log-states))
+                                         org-todo-keywords-1)
+                             (list "")))
+           (current (or (org-get-todo-state) ""))
+           (idx (or (cl-position current keywords :test #'equal) -1))
+           (delta (if reverse -1 1))
+           (next (nth (mod (+ idx delta) (length keywords)) keywords)))
+      (org-todo next)))
+  :bind (("C-c c" . org-capture)
+         ("C-c i" . kb/org-open-inbox)
+         :map org-mode-map
+         ("C-S-<right>" . kb/org-todo-cycle-all)
+         ("C-S-<left>"  . (lambda () (interactive) (kb/org-todo-cycle-all t))))
   :config
   (setopt org-export-backends '(ascii html icalendar latex odt md))
   (setq
@@ -2646,6 +2674,11 @@ As seen on: https://emacs.dyerdwelling.family/emacs/20250604085817-emacs--buildi
    org-hide-emphasis-markers t
    org-pretty-entities t
    org-use-sub-superscripts nil ;; We want the above but no _ subscripts ^ superscripts
+   org-src-fontify-natively t
+   org-src-tab-acts-natively t
+   org-edit-src-content-indentation 0
+   org-fontify-whole-heading-line t
+   org-fontify-quote-and-verse-blocks t
 
    ;; Agenda styling
    org-agenda-tags-column 0
@@ -2665,13 +2698,13 @@ As seen on: https://emacs.dyerdwelling.family/emacs/20250604085817-emacs--buildi
   ;; Keywords
   ;; As seen in https://github.com/gregnewman/gmacs/blob/master/gmacs.org
   (setq org-todo-keywords
-        (quote ((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)" "PROJECTDONE(e)")
+        (quote ((sequence "TODO(t)" "NEXT(n)" "DOING(g)" "|" "DONE(d)")
                 (sequence "WAITING(w@/!)" "SOMEDAY(s@/!)" "|" "CANCELLED(c@/!)"))))
   (setq org-todo-keyword-faces
         (quote (("TODO" :foreground "lime green" :weight bold)
                 ("NEXT" :foreground "cyan" :weight bold)
+                ("DOING" :foreground "orange" :weight bold)
                 ("DONE" :foreground "dim gray" :weight bold)
-                ("PROJECTDONE" :foreground "dim gray" :weight bold)
                 ("WAITING" :foreground "tomato" :weight bold)
                 ("SOMEDAY" :foreground "magenta" :weight bold)
                 ("CANCELLED" :foreground "dim gray" :weight bold))))
@@ -2687,7 +2720,16 @@ As seen on: https://emacs.dyerdwelling.family/emacs/20250604085817-emacs--buildi
        (emacs-lisp . t)
        (org . t)
        (shell . t)))
-    (setq org-confirm-babel-evaluate nil))
+    (setq org-confirm-babel-evaluate nil)
+
+  ;; Capture
+  (setq org-directory "~/Documents/org"
+        org-default-notes-file (expand-file-name "inbox.org" org-directory))
+  (setq org-capture-templates
+        '(("t" "Todo" entry (file+headline org-default-notes-file "Tasks")
+           "* TODO %?\n  %U")
+          ("n" "Note" entry (file+headline org-default-notes-file "Notes")
+           "* %?\n  %U\n  %a"))))
 
 
 ;;; │ SPEEDBAR
