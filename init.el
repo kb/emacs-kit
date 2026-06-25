@@ -151,10 +151,11 @@ for ESLint."
 (package-initialize)
 
 ;;; ├──────────────────── macOS MODIFIER KEYS
-(setq mac-command-modifier 'super)
-(setq mac-option-modifier 'meta)
-(setq ns-command-modifier 'super)
-(setq ns-alternate-modifier 'meta)
+(when (eq system-type 'darwin)
+  (setq mac-command-modifier 'super
+        mac-option-modifier 'meta
+        ns-command-modifier 'super
+        ns-alternate-modifier 'meta))
 
 ;;; ├──────────────────── GENERAL EMACS CONFIG
 ;;; │ EMACS
@@ -1445,27 +1446,9 @@ Ex: mpv file1 file2 file3 file4..."
   (setq wdired-create-parent-directories t))
 
 
-;;; │ EAT
-(use-package eat
-  :ensure t
-  :custom
-  (eat-enable-auto-line-mode t))
-
-;; vterm is for running a shell *inside* emacs.  Inside a cook pod the
-;; emacs IS already inside a terminal -- a vterm there would be a shell
-;; in a terminal in a terminal, plus it needs libtool/libvterm-dev to
-;; compile the C module which the agent-runtime image doesn't ship.
-;; Gate on GUI so only the host Mac emacs installs/loads it.
-(when (display-graphic-p)
-  (use-package vterm
-    :ensure t
-    :defer t
-    :custom
-    (vterm-shell (concat shell-file-name " -l"))))
-
 ;; ghostel: libghostty-vt terminal for the host Mac GUI.  Renders TUIs
-;; (claude, make) far better than eat, and opens a remote shell when
-;; `default-directory' is a TRAMP path -- the basis for emacs-kit-cook.
+;; (claude, make) well, and opens a remote shell when `default-directory'
+;; is a TRAMP path -- the basis for emacs-kit-cook.
 ;; First use needs the native module: M-x ghostel-download-module.
 (when (display-graphic-p)
   (use-package ghostel
