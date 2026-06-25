@@ -51,6 +51,13 @@ The cook workspace command names Claude buffers like
   :type 'regexp
   :group 'emacs-kit-magit-comment)
 
+(defcustom emacs-kit-magit-comment-submit-delay 0.2
+  "Seconds to wait after pasting before submitting to Claude.
+Claude's TUI can need a short moment to finish processing bracketed paste
+before it reliably accepts Return as submit."
+  :type 'number
+  :group 'emacs-kit-magit-comment)
+
 (defun emacs-kit/magit-comment--section-text (section)
   "Return SECTION text without properties, or nil."
   (when section
@@ -105,8 +112,17 @@ Errors if none are running."
   (with-current-buffer buffer
     (unless (derived-mode-p 'ghostel-mode)
       (user-error "Target buffer is not a ghostel buffer"))
-    (ghostel-paste-string text)
-    (ghostel-send-key "return")))
+    (ghostel-paste-string text))
+  ;; Submit after a brief delay so the TUI has processed the bracketed paste
+  ;; terminator before Return arrives.
+  (run-at-time
+   emacs-kit-magit-comment-submit-delay nil
+   (lambda (buf)
+     (when (buffer-live-p buf)
+       (with-current-buffer buf
+         (when (derived-mode-p 'ghostel-mode)
+           (ghostel-send-key "return")))))
+   buffer))
 
 ;;;###autoload
 (defun emacs-kit/magit-comment-on-diff ()
