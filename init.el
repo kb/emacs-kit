@@ -626,13 +626,11 @@ Use ⇒ if displayable, otherwise fallback to =>."
   ;; Keep margins from automatic resizing
   (defun emacs-kit/set-default-window-margins ()
     "Set default left and right margins for all windows.
-Unless the buffer uses `emacs-kit/center-document-mode`
-or is an ERC buffer."
+Unless the buffer is an ERC buffer."
     (interactive)
     (dolist (window (window-list))
       (with-current-buffer (window-buffer window)
-        (unless (or (bound-and-true-p emacs-kit/center-document-mode)
-                    (derived-mode-p 'erc-mode))
+        (unless (derived-mode-p 'erc-mode)
           (set-window-margins window 2 0))))) ;; (LEFT RIGHT)
 
   (add-hook 'window-configuration-change-hook #'emacs-kit/set-default-window-margins)
@@ -3798,10 +3796,8 @@ prompts to pick one.  With none, errors -- start one first via
 (load-theme 'modus-vivendi t)
 
 ;; Decode application-keypad arrow keys on TTY.  Some terminals (notably
-;; ssh-into-pod sessions) send `ESC O <letter>' for arrows; without these
-;; bindings, emacs reads `ESC O' as M-O and `ace-window' (bound to M-o)
-;; eats the trailing A/B/C/D as a "window picker" key, producing
-;; "no window assigned to key: A" instead of cursor movement.
+;; ssh-into-pod sessions) send `ESC O <letter>' for arrows.  Decode those
+;; sequences explicitly so Emacs treats them as cursor/navigation keys.
 (unless (display-graphic-p)
   (define-key input-decode-map "\eOA" [up])
   (define-key input-decode-map "\eOB" [down])
@@ -3825,8 +3821,6 @@ prompts to pick one.  With none, errors -- start one first via
 (when (display-graphic-p) (require 'emacs-kit-cook))
 (require 'emacs-kit-highlight-keywords)
 (require 'emacs-kit-gutter)
-(require 'emacs-kit-ace-window)
-(require 'emacs-kit-olivetti)
 (require 'emacs-kit-sudo-edit)
 (require 'emacs-kit-replace-as-diff)
 (require 'emacs-kit-weather)
@@ -3841,8 +3835,6 @@ prompts to pick one.  With none, errors -- start one first via
 (require 'emacs-kit-clipboard)
 (when (display-graphic-p) (require 'emacs-kit-eldoc-box))
 (require 'emacs-kit-flymake-eslint)
-(require 'emacs-kit-digits)
-(require 'emacs-kit-conductor)
 (require 'emacs-kit-magit-comment)
 (provide 'init)
 ;;; └ init.el ends here
