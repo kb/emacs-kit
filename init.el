@@ -265,6 +265,12 @@ for ESLint."
   (remote-file-name-inhibit-auto-save-visited t)
   (tramp-copy-size-limit (* 2 1024 1024)) ;; 2MB
   (tramp-use-scp-direct-remote-copying t)
+  ;; Let ~/.ssh/config own ControlMaster/ControlPath/ProxyCommand behavior.
+  ;; This is important for cook pods: ~/.digits/cook/ssh/config supplies the
+  ;; kubectl ProxyCommand, and ~/.ssh/config supplies the cook-* mux socket.
+  ;; TRAMP's own connection sharing would otherwise add competing -o
+  ;; ControlPath=... options.
+  (tramp-use-connection-share nil)
   (tramp-verbose 2)
   (resize-mini-windows 'grow-only)
   (scroll-conservatively 8)
@@ -1442,6 +1448,16 @@ Ex: mpv file1 file2 file3 file4..."
     :defer t
     :custom
     (vterm-shell (concat shell-file-name " -l"))))
+
+;; ghostel: libghostty-vt terminal for the host Mac GUI.  Renders TUIs
+;; (claude, make) far better than eat, and opens a remote shell when
+;; `default-directory' is a TRAMP path -- the basis for emacs-kit-cook.
+;; First use needs the native module: M-x ghostel-download-module.
+(when (display-graphic-p)
+  (use-package ghostel
+    :ensure t
+    :defer t
+    :commands (ghostel ghostel-project ghostel-send-string)))
 
 (use-package agent-shell
   :ensure t
@@ -3467,6 +3483,7 @@ prompts to pick one.  With none, errors -- start one first via
 (require 'emacs-kit-rainbow-delimiters)
 (require 'emacs-kit-project-select)
 (require 'emacs-kit-viper-extensions)
+(when (display-graphic-p) (require 'emacs-kit-cook))
 (require 'emacs-kit-highlight-keywords)
 (require 'emacs-kit-gutter)
 (require 'emacs-kit-ace-window)
