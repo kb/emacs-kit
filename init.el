@@ -3801,7 +3801,12 @@ prompts to pick one.  With none, errors -- start one first via
 (require 'emacs-kit-exec-path-from-shell)
 (require 'emacs-kit-rainbow-delimiters)
 (require 'emacs-kit-project-select)
-(when (display-graphic-p) (require 'emacs-kit-cook))
+;; Use `load' instead of `require' so `C-c R' actually refreshes this actively
+;; edited cook integration.  `require' would skip it once `emacs-kit-cook' is
+;; already provided, leaving stale interactive command definitions around.
+(when (display-graphic-p)
+  (load (expand-file-name "lisp/emacs-kit-cook.el" user-emacs-directory)
+        nil 'nomessage))
 (require 'emacs-kit-highlight-keywords)
 (require 'emacs-kit-gutter)
 (require 'emacs-kit-sudo-edit)

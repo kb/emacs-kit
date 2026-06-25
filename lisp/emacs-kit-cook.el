@@ -136,7 +136,8 @@ The wildcard `cook-*' catch-all entry is excluded."
                                  " list --tsv 2>/dev/null")))))
       (when output
         (seq-filter
-         #'string-present-p
+         (lambda (branch)
+           (not (string-empty-p branch)))
          (mapcar
           (lambda (line)
             (let ((fields (split-string line "\t")))
@@ -147,8 +148,9 @@ The wildcard `cook-*' catch-all entry is excluded."
     "Read a cook branch with PROMPT, DEFAULT, and optional BRANCHES completion."
     (let* ((prompt (or prompt "Cook branch: "))
            (completion-extra-properties
-            '(:annotation-function
-              (lambda (s) (and (member s branches) "  active pod"))))
+            `(:annotation-function
+              ,(lambda (s)
+                 (and (member s branches) "  active pod"))))
            (value (completing-read
                    (if (and default (not (string-empty-p default)))
                        (format "%s(default %s) " prompt default)
