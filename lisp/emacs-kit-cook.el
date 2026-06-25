@@ -20,12 +20,16 @@
 (require 'project)
 (declare-function ghostel "ghostel" (&optional arg))
 (declare-function ghostel-send-string "ghostel" (string))
+(declare-function persp-current-name "perspective" ())
 (declare-function persp-switch "perspective" (name &optional norecord))
 (declare-function persp-add-buffer "perspective" (buffer-or-name))
+(declare-function tab-bar--current-tab-find "tab-bar" (&optional tabs frame))
 (defvar ghostel-buffer-name)
 (defvar ghostel-buffer-name-function)
 (defvar ghostel-tramp-shells)
+(defvar persp-initial-frame-name)
 (defvar persp-mode)
+(defvar tab-bar-tab-post-select-functions)
 (defvar-local emacs-kit/claude-tui-buffer nil
   "Non-nil when this buffer is a Claude TUI target for Emacs Kit helpers.")
 
@@ -96,11 +100,59 @@ The wildcard `cook-*' catch-all entry is excluded."
     "Return the Perspective name to use for cook pod HOST."
     (emacs-kit/cook--label host))
 
+  (defun emacs-kit/cook--default-perspective-name ()
+    "Return the Perspective name to use for non-cook tabs."
+    (if (boundp 'persp-initial-frame-name)
+        persp-initial-frame-name
+      "main"))
+
+  (defun emacs-kit/cook--tag-current-tab (host)
+    "Tag the current `tab-bar' tab as the workspace for cook pod HOST."
+    (when-let* ((tab (and (fboundp 'tab-bar--current-tab-find)
+                          (tab-bar--current-tab-find))))
+      ;; `tab-bar' preserves unknown tab alist keys when saving/restoring tabs,
+      ;; so this lets tab selection restore the matching Perspective later.
+      (setf (alist-get 'emacs-kit-cook-host tab) host)
+      (setf (alist-get 'emacs-kit-perspective tab)
+            (emacs-kit/cook--perspective-name host))))
+
+  (defun emacs-kit/cook--host-for-label (label)
+    "Return the cook ssh host whose workspace label is LABEL, or nil."
+    (seq-find (lambda (host)
+                (equal (emacs-kit/cook--label host) label))
+              (emacs-kit/cook--hosts)))
+
+  (defun emacs-kit/cook--tab-perspective (tab)
+    "Return the Perspective associated with TAB.
+Tabs created before cook tabs were tagged can still be recognized by matching
+their tab name to the active cook pod host list."
+    (or (alist-get 'emacs-kit-perspective tab)
+        (when-let* ((label (alist-get 'name tab))
+                    (host (emacs-kit/cook--host-for-label label)))
+          (setf (alist-get 'emacs-kit-cook-host tab) host)
+          (setf (alist-get 'emacs-kit-perspective tab)
+                (emacs-kit/cook--perspective-name host)))))
+
   (defun emacs-kit/cook--switch-perspective (host)
     "Switch to HOST's cook Perspective when `persp-mode' is active."
     (when (and (featurep 'perspective)
                (bound-and-true-p persp-mode))
       (persp-switch (emacs-kit/cook--perspective-name host))))
+
+  (defun emacs-kit/cook--sync-perspective-to-tab (&rest _)
+    "Switch Perspective to match the selected `tab-bar' tab.
+Cook workspace tabs are tagged with their pod perspective.  Untagged tabs are
+treated as ordinary/default Emacs tabs and return to the initial Perspective,
+which keeps `C-x b' from showing buffers from the last visited cook workspace."
+    (when (and (featurep 'perspective)
+               (bound-and-true-p persp-mode)
+               (fboundp 'tab-bar--current-tab-find))
+      (let* ((tab (tab-bar--current-tab-find))
+             (target (or (emacs-kit/cook--tab-perspective tab)
+                         (emacs-kit/cook--default-perspective-name))))
+        (when (and target
+                   (not (equal target (persp-current-name))))
+          (persp-switch target)))))
 
   (defun emacs-kit/cook--repo-root ()
     "Return the expanded cook repo root as a directory name."
@@ -274,9 +326,11 @@ running terminals."
       (if (emacs-kit/cook--tab-exists-p label)
           (progn
             (tab-bar-switch-to-tab label)
+            (emacs-kit/cook--tag-current-tab host)
             (emacs-kit/cook--switch-perspective host))
         (tab-bar-new-tab)
         (tab-bar-rename-tab label)
+        (emacs-kit/cook--tag-current-tab host)
         (emacs-kit/cook--switch-perspective host)
         (delete-other-windows)
         (dired (emacs-kit/cook--remote-dir host))
@@ -290,6 +344,9 @@ running terminals."
             (emacs-kit/cook--display-terminal
              stack host "stack" (and emacs-kit/cook-autostart-stack "make core")))
           (select-window files)))))
+
+  (add-hook 'tab-bar-tab-post-select-functions
+            #'emacs-kit/cook--sync-perspective-to-tab)
 
   :bind (("C-c p c" . emacs-kit/cook-create)
          ("C-c p r" . emacs-kit/cook-rm)
