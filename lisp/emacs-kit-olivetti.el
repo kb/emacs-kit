@@ -48,7 +48,9 @@
     (emacs-kit/center-document--adjust-margins))
 
 
-  (add-hook 'org-mode-hook #'emacs-kit/center-document-mode)
+  ;; org-mode hook removed -- the constrained viewport felt wrong with
+  ;; wide terminals; opt in per-buffer with `M-x emacs-kit/center-document-mode'
+  ;; when you actually want the prose-style margins.
   (add-hook 'gnus-group-mode-hook #'emacs-kit/center-document-mode)
   (add-hook 'gnus-summary-mode-hook #'emacs-kit/center-document-mode)
   (add-hook 'gnus-article-mode-hook #'emacs-kit/center-document-mode)
