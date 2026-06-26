@@ -24,12 +24,14 @@
 (declare-function persp-switch "perspective" (name &optional norecord))
 (declare-function persp-add-buffer "perspective" (buffer-or-name))
 (declare-function tab-bar--current-tab-find "tab-bar" (&optional tabs frame))
+(defvar eglot-server-programs)
 (defvar ghostel-buffer-name)
 (defvar ghostel-buffer-name-function)
 (defvar ghostel-tramp-shells)
 (defvar persp-initial-frame-name)
 (defvar persp-mode)
 (defvar tab-bar-tab-post-select-functions)
+(defvar tramp-remote-path)
 (defvar-local emacs-kit/claude-tui-buffer nil
   "Non-nil when this buffer is a Claude TUI target for Emacs Kit helpers.")
 
@@ -55,6 +57,15 @@ from the core checkout rather than from `user-emacs-directory'."
     "Command used to run cook."
     :type 'string :group 'emacs-kit)
 
+  (defcustom emacs-kit/cook-tramp-remote-paths
+    '("/usr/local/cook-bin"
+      "/home/agent/.dev-profile/bin"
+      "/home/agent/go/bin"
+      "/home/agent/.local/bin"
+      "/usr/local/go/bin")
+    "Remote PATH entries TRAMP should know about inside cook pods."
+    :type '(repeat string) :group 'emacs-kit)
+
   (defcustom emacs-kit/cook-autostart-claude t
     "When non-nil, run `claude' in a new workspace's claude terminal."
     :type 'boolean :group 'emacs-kit)
@@ -64,6 +75,10 @@ from the core checkout rather than from `user-emacs-directory'."
 Off by default: the stack boots emulators and is slow, so it's usually
 started on demand rather than with every workspace."
     :type 'boolean :group 'emacs-kit)
+
+  (defcustom emacs-kit/cook-claude-window-width-ratio 0.65
+    "Fraction of cook workspace width used for the left Claude window."
+    :type 'number :group 'emacs-kit)
 
   (defun emacs-kit/cook--hosts ()
     "Return the `cook-*' ssh host aliases from the cook ssh config.
@@ -89,6 +104,44 @@ The wildcard `cook-*' catch-all entry is excluded."
     ;; login/session setup.  Existing successful cook TRAMP paths in this config
     ;; also use /sshx:cook-...:.
     (format "/sshx:%s:%s" host emacs-kit/cook-remote-repo))
+
+  (defun emacs-kit/cook--remote-path-p (path)
+    "Return non-nil when PATH is a TRAMP path for a cook pod."
+    (and (stringp path)
+         (file-remote-p path)
+         (when-let* ((host (file-remote-p path 'host)))
+           (string-prefix-p "cook-" host))))
+
+  (defun emacs-kit/cook--install-tramp-remote-paths ()
+    "Teach TRAMP about cook pod PATH entries.
+Eglot asks TRAMP whether servers like gopls exist before starting them.
+Those tools live under /home/agent and cook profile directories that TRAMP's
+default remote PATH does not include."
+    (with-eval-after-load 'tramp
+      (dolist (path (reverse emacs-kit/cook-tramp-remote-paths))
+        (add-to-list 'tramp-remote-path path))))
+
+  (defun emacs-kit/cook--eglot-gopls-contact (_interactive project)
+    "Return an Eglot contact for gopls.
+For cook pod projects, start gopls through the pod's cook profile setup instead
+of relying on TRAMP's minimal remote PATH."
+    (let ((root (and project (project-root project))))
+      (if (emacs-kit/cook--remote-path-p root)
+          '("/bin/bash" "-lc"
+            ". /etc/profile.d/cook-env.sh 2>/dev/null || true; exec gopls")
+        '("gopls"))))
+
+  (defun emacs-kit/cook--install-eglot-programs ()
+    "Install cook-aware Eglot server program entries."
+    (with-eval-after-load 'eglot
+      (add-to-list
+       'eglot-server-programs
+       `((go-mode go-dot-mod-mode go-dot-work-mode
+          go-ts-mode go-mod-ts-mode go-work-ts-mode)
+         . ,#'emacs-kit/cook--eglot-gopls-contact))))
+
+  (emacs-kit/cook--install-tramp-remote-paths)
+  (emacs-kit/cook--install-eglot-programs)
 
   (defun emacs-kit/cook--remember-project (host)
     "Remember HOST's cook repo in `project-list-file', when detectable."
@@ -255,6 +308,24 @@ pod's conversation."
     (format "claude --name %s"
             (shell-quote-argument (emacs-kit/cook--label host))))
 
+  (defun emacs-kit/cook--terminal-buffer-name (host title)
+    "Return the stable ghostel buffer name for HOST and TITLE."
+    (format "*%s:%s*" (emacs-kit/cook--label host) title))
+
+  (defun emacs-kit/cook--terminal-live-p (host title)
+    "Return non-nil when HOST/TITLE's ghostel buffer has a live process."
+    (when-let* ((buffer (get-buffer
+                         (emacs-kit/cook--terminal-buffer-name host title))))
+      (and (buffer-live-p buffer)
+           (get-buffer-process buffer))))
+
+  (defun emacs-kit/cook--kill-stale-terminal (host title)
+    "Kill HOST/TITLE's ghostel buffer when its process is gone."
+    (when-let* ((buffer (get-buffer
+                         (emacs-kit/cook--terminal-buffer-name host title))))
+      (unless (get-buffer-process buffer)
+        (kill-buffer buffer))))
+
   (defun emacs-kit/cook--terminal (host title &optional command)
     "Open ghostel terminal TITLE on cook pod HOST; return its buffer.
 A live buffer for the same HOST/TITLE is reused.  With COMMAND non-nil,
@@ -262,7 +333,9 @@ type it into the remote shell once the login shell has settled (the
 shell is interactive+login per `ghostel-tramp-shells', so PATH resolves
 pod tools like `claude')."
     (require 'ghostel)
-    (let* ((default-directory (emacs-kit/cook--remote-dir host))
+    (emacs-kit/cook--kill-stale-terminal host title)
+    (let* ((existing-live (emacs-kit/cook--terminal-live-p host title))
+           (default-directory (emacs-kit/cook--remote-dir host))
            ;; Ghostel doesn't ship an `sshx' entry in `ghostel-tramp-shells'.
            ;; Without one it falls back to TRAMP's /bin/sh, which skips the
            ;; cook dev-profile zsh setup and misses PATH entries like
@@ -275,7 +348,7 @@ pod tools like `claude')."
                     ". /etc/profile.d/cook-env.sh 2>/dev/null || true; exec /usr/bin/zsh -l -i")
                   ghostel-tramp-shells))
            (ghostel-buffer-name
-            (format "*%s:%s*" (emacs-kit/cook--label host) title))
+            (emacs-kit/cook--terminal-buffer-name host title))
            (buffer (ghostel)))
       ;; Ghostel normally renames buffers to whatever OSC title the TUI reports
       ;; (Claude uses its session name).  In cook workspaces that makes a new
@@ -285,7 +358,7 @@ pod tools like `claude')."
         (setq-local ghostel-buffer-name-function nil)
         (setq-local emacs-kit/claude-tui-buffer (string= title "claude"))
         (rename-buffer ghostel-buffer-name t))
-      (when command
+      (when (and command (not existing-live))
         (run-at-time
          0.6 nil
          (lambda (buf cmd)
@@ -303,6 +376,28 @@ With COMMAND non-nil, send it after the login shell has settled."
         (set-window-buffer window buffer)
         buffer)))
 
+  (defun emacs-kit/cook--setup-workspace-layout (host)
+    "Create HOST's standard cook workspace layout in the selected tab."
+    (delete-other-windows)
+    (let* ((total-width (window-total-width))
+           (left-width
+            (max window-min-width
+                 (min (floor (* total-width
+                                emacs-kit/cook-claude-window-width-ratio))
+                      (- total-width window-min-width))))
+           (claude (selected-window))
+           (right (split-window-right left-width))
+           (stack (with-selected-window right
+                    (split-window-below))))
+      (emacs-kit/cook--display-terminal
+       claude host "claude" (and emacs-kit/cook-autostart-claude
+                                 (emacs-kit/cook--claude-command host)))
+      (set-window-buffer right
+                         (dired-noselect (emacs-kit/cook--remote-dir host)))
+      (emacs-kit/cook--display-terminal
+       stack host "stack" (and emacs-kit/cook-autostart-stack "make core"))
+      (select-window claude)))
+
   (defun emacs-kit/cook--tab-exists-p (name)
     "Return non-nil when a `tab-bar' tab named NAME exists on this frame."
     (seq-find (lambda (tab) (equal (alist-get 'name tab) name))
@@ -317,9 +412,9 @@ With COMMAND non-nil, send it after the login shell has settled."
 
   (defun emacs-kit/cook-workspace (host)
     "Open or switch to the `tab-bar' workspace for cook pod HOST.
-Layout: remote dired on the left, claude over the dev stack on the right.
-Re-running for an existing pod switches to its tab without disturbing the
-running terminals."
+Layout: Claude in a large left window, with remote dired over the dev stack on
+the right.  Re-running for an existing pod switches to its tab and refreshes
+the standard layout without disturbing live terminal buffers."
     (interactive (list (emacs-kit/cook--read-host)))
     (let ((label (emacs-kit/cook--label host)))
       (emacs-kit/cook--remember-project host)
@@ -327,23 +422,13 @@ running terminals."
           (progn
             (tab-bar-switch-to-tab label)
             (emacs-kit/cook--tag-current-tab host)
-            (emacs-kit/cook--switch-perspective host))
+            (emacs-kit/cook--switch-perspective host)
+            (emacs-kit/cook--setup-workspace-layout host))
         (tab-bar-new-tab)
         (tab-bar-rename-tab label)
         (emacs-kit/cook--tag-current-tab host)
         (emacs-kit/cook--switch-perspective host)
-        (delete-other-windows)
-        (dired (emacs-kit/cook--remote-dir host))
-        (let ((files (selected-window)))
-          (let* ((right (split-window-right))
-                 (stack (with-selected-window right
-                          (split-window-below))))
-            (emacs-kit/cook--display-terminal
-             right host "claude" (and emacs-kit/cook-autostart-claude
-                                       (emacs-kit/cook--claude-command host)))
-            (emacs-kit/cook--display-terminal
-             stack host "stack" (and emacs-kit/cook-autostart-stack "make core")))
-          (select-window files)))))
+        (emacs-kit/cook--setup-workspace-layout host))))
 
   (add-hook 'tab-bar-tab-post-select-functions
             #'emacs-kit/cook--sync-perspective-to-tab)
