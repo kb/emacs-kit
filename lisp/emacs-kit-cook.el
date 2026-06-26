@@ -9,7 +9,7 @@
 ;;
 ;; Drive cook dev pods from a single GUI Emacs.  Each pod becomes a
 ;; `tab-bar' workspace: remote files over TRAMP plus `ghostel' terminals
-;; running on the pod (claude, dev stack).  Pods are reached through the
+;; running on the pod (claude, shell, dev stack).  Pods are reached through the
 ;; `cook-*' ssh hosts that cook writes to ~/.digits/cook/ssh/config, so
 ;; the pod list and TRAMP transport stay in sync with `cook' itself.
 
@@ -75,10 +75,6 @@ from the core checkout rather than from `user-emacs-directory'."
 Off by default: the stack boots emulators and is slow, so it's usually
 started on demand rather than with every workspace."
     :type 'boolean :group 'emacs-kit)
-
-  (defcustom emacs-kit/cook-claude-window-width-ratio 0.65
-    "Fraction of cook workspace width used for the left Claude window."
-    :type 'number :group 'emacs-kit)
 
   (defun emacs-kit/cook--hosts ()
     "Return the `cook-*' ssh host aliases from the cook ssh config.
@@ -191,6 +187,13 @@ their tab name to the active cook pod host list."
     (when (and (featurep 'perspective)
                (bound-and-true-p persp-mode))
       (persp-switch (emacs-kit/cook--perspective-name host))))
+
+  (defun emacs-kit/cook--add-buffer-to-perspective (buffer)
+    "Associate BUFFER with the current Perspective, when Perspective is active."
+    (when (and buffer
+               (featurep 'perspective)
+               (bound-and-true-p persp-mode))
+      (persp-add-buffer buffer)))
 
   (defun emacs-kit/cook--sync-perspective-to-tab (&rest _)
     "Switch Perspective to match the selected `tab-bar' tab.
@@ -379,24 +382,18 @@ With COMMAND non-nil, send it after the login shell has settled."
   (defun emacs-kit/cook--setup-workspace-layout (host)
     "Create HOST's standard cook workspace layout in the selected tab."
     (delete-other-windows)
-    (let* ((total-width (window-total-width))
-           (left-width
-            (max window-min-width
-                 (min (floor (* total-width
-                                emacs-kit/cook-claude-window-width-ratio))
-                      (- total-width window-min-width))))
-           (claude (selected-window))
-           (right (split-window-right left-width))
-           (stack (with-selected-window right
-                    (split-window-below))))
-      (emacs-kit/cook--display-terminal
-       claude host "claude" (and emacs-kit/cook-autostart-claude
-                                 (emacs-kit/cook--claude-command host)))
-      (set-window-buffer right
-                         (dired-noselect (emacs-kit/cook--remote-dir host)))
-      (emacs-kit/cook--display-terminal
-       stack host "stack" (and emacs-kit/cook-autostart-stack "make core"))
-      (select-window claude)))
+    (let* ((dired-buffer (dired-noselect (emacs-kit/cook--remote-dir host)))
+           (shell-buffer (emacs-kit/cook--terminal host "shell"))
+           (stack-buffer (emacs-kit/cook--terminal
+                          host "stack"
+                          (and emacs-kit/cook-autostart-stack "make core")))
+           (claude-buffer (emacs-kit/cook--terminal
+                           host "claude"
+                           (and emacs-kit/cook-autostart-claude
+                                (emacs-kit/cook--claude-command host)))))
+      (dolist (buffer (list dired-buffer shell-buffer stack-buffer claude-buffer))
+        (emacs-kit/cook--add-buffer-to-perspective buffer))
+      (switch-to-buffer claude-buffer)))
 
   (defun emacs-kit/cook--tab-exists-p (name)
     "Return non-nil when a `tab-bar' tab named NAME exists on this frame."
@@ -412,9 +409,10 @@ With COMMAND non-nil, send it after the login shell has settled."
 
   (defun emacs-kit/cook-workspace (host)
     "Open or switch to the `tab-bar' workspace for cook pod HOST.
-Layout: Claude in a large left window, with remote dired over the dev stack on
-the right.  Re-running for an existing pod switches to its tab and refreshes
-the standard layout without disturbing live terminal buffers."
+Layout: Claude is the visible buffer.  Remote dired, shell, and dev-stack
+buffers are created/reused in the same Perspective but left hidden until you
+switch to them.  Re-running for an existing pod switches to its tab and
+refreshes those buffers without disturbing live terminal buffers."
     (interactive (list (emacs-kit/cook--read-host)))
     (let ((label (emacs-kit/cook--label host)))
       (emacs-kit/cook--remember-project host)
