@@ -14,6 +14,14 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+(require 'vc-git)
+
+(defvar-local git-gutter-diff-info nil
+  "Current buffer's parsed Git gutter hunk data.
+Each entry is (LINE . STATUS), where STATUS is \"added\", \"changed\", or
+\"deleted\".")
+
 (use-package emacs-kit-gutter
   :if emacs-kit-enable-buffer-gutter
   :ensure nil
@@ -65,33 +73,78 @@
         (goto-char (point-min))
         (forward-line (1- previous-line-number)))))
 
+  (defun emacs-kit/git-gutter--file-relative-to-root (file root)
+    "Return FILE relative to Git ROOT."
+    (let ((root (file-name-as-directory root)))
+      (condition-case nil
+          (file-relative-name file root)
+        ;; TRAMP may need to expand remote ~ while a connection is stale.  If
+        ;; that fails, fall back to local-name string handling; running git
+        ;; below will reconnect through TRAMP anyway.
+        (file-error
+         (let ((file-local (file-local-name file))
+               (root-local (file-name-as-directory (file-local-name root))))
+           (when (and (string-prefix-p "~/" file-local)
+                      (string-match "\\`\\(/home/[^/]+\\)/" root-local))
+             (setq file-local
+                   (concat (match-string 1 root-local)
+                           "/"
+                           (substring file-local 2))))
+           (if (string-prefix-p root-local file-local)
+               (substring file-local (length root-local))
+             file-local))))))
+
+  (defun emacs-kit/git-gutter--git-diff-output (file)
+    "Return `git diff --unified=0' output for FILE, local or remote."
+    (when-let* ((root (vc-git-root file))
+                (relative-file
+                 (emacs-kit/git-gutter--file-relative-to-root file root)))
+      (let ((default-directory (file-name-as-directory root)))
+        (with-temp-buffer
+          (let ((exit-code
+                 (process-file "git" nil t nil
+                               "diff" "--unified=0" "--" relative-file)))
+            (when (and (integerp exit-code) (zerop exit-code))
+              (buffer-string)))))))
+
+  (defun emacs-kit/git-gutter--parse-hunk-lines (diff-output)
+    "Parse DIFF-OUTPUT hunk headers into gutter line/status entries."
+    (let (result)
+      (dolist (line (split-string diff-output "\n" t))
+        (when (string-match
+               "^@@ -\\([0-9]+\\)\\(?:,\\([0-9]+\\)\\)? \\+\\([0-9]+\\)\\(?:,\\([0-9]+\\)\\)? @@"
+               line)
+          (let* ((old-count (if (match-string 2 line)
+                                (string-to-number (match-string 2 line))
+                              1))
+                 (new-start (string-to-number (match-string 3 line)))
+                 (new-count (if (match-string 4 line)
+                                (string-to-number (match-string 4 line))
+                              1)))
+            (cond
+             ((= new-count 0)
+              (push (cons (1+ new-start) "deleted") result))
+             ((= old-count 0)
+              (dotimes (i new-count)
+                (push (cons (+ new-start i) "added") result)))
+             (t
+              (dotimes (i new-count)
+                (push (cons (+ new-start i) "changed") result)))))))
+      (nreverse result)))
 
   (defun emacs-kit/git-gutter-process-git-diff ()
     "Process git diff for adds/mods/removals.
-Marks lines as added, deleted, or changed."
+Marks lines as added, deleted, or changed.  Works for local files and TRAMP
+files by running git from the repository root and passing a repo-relative path."
     (interactive)
-    (let* ((result '())
-           (file-path (buffer-file-name))
-           (grep-command "rg -Po")                         ; for rgrep
-           ;; (grep-command (if (eq system-type 'darwin)   ; for grep / ggrep
-           ;;                   "ggrep -Po"
-           ;;                 "grep -Po"))
-           (output (shell-command-to-string
-                    (format
-                     "git diff --unified=0 %s | %s '^@@ -[0-9]+(,[0-9]+)? \\+\\K[0-9]+(,[0-9]+)?(?= @@)'"
-                     (shell-quote-argument file-path)
-                     grep-command)))
-           (lines (split-string output "\n")))
-      (dolist (line lines)
-        (if (string-match "\\(^[0-9]+\\),\\([0-9]+\\)\\(?:,0\\)?$" line)
-            (let ((num (string-to-number (match-string 1 line)))
-                  (count (string-to-number (match-string 2 line))))
-              (if (= count 0)
-                  (push (cons (+ 1 num) "deleted") result)
-                (dotimes (i count)
-                  (push (cons (+ num i) "changed") result))))
-          (if (string-match "\\(^[0-9]+\\)$" line)
-              (push (cons (string-to-number line) "added") result))))
+    (let* ((file-path (buffer-file-name))
+           (result (and file-path
+                        (condition-case nil
+                            (when-let* ((output
+                                         (emacs-kit/git-gutter--git-diff-output
+                                          file-path)))
+                              (emacs-kit/git-gutter--parse-hunk-lines output))
+                          (file-error nil)))))
       (setq-local git-gutter-diff-info result)
       result))
 
